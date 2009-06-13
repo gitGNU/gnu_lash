@@ -531,7 +531,7 @@ store_get_config(store_t     *store,
 	uint32_t u;
 	size_t size;
 	void *value;
-	int type;
+	char type;
 
 	/* If there's an unstored config return that */
 	config = store_get_unstored_config(store, key);
@@ -584,8 +584,8 @@ store_get_config(store_t     *store,
 	/* Only accept API-defined types */
 	else if (type != LASH_TYPE_DOUBLE && type != LASH_TYPE_INTEGER
 	         && type != LASH_TYPE_STRING && type != LASH_TYPE_RAW) {
-		lash_error("Config file '%s' contains an invalid type",
-		           filename);
+		lash_error("Config file '%s' contains invalid type %d",
+		           filename, type);
 		goto fail_free;
 	}
 
