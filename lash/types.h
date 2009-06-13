@@ -105,21 +105,6 @@ typedef void (*LashControlCallback) (enum LASH_Event_Type  type,
                                      void                 *user_data);
 
 
-/* Types which belong entirely to the old API */
-
-#include <stdint.h>
-
-/* the set of lash-specific arguments that are extracted from argc/argv */
-typedef struct _lash_args lash_args_t;
-
-/* an event */
-typedef struct _lash_event lash_event_t;
-
-/* a bit of key-indexed data */
-typedef struct _lash_config lash_config_t;
-
-typedef uint32_t lash_protocol_t;
-
 #ifdef __cplusplus
 }
 #endif
