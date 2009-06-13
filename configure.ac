@@ -2,7 +2,7 @@ AC_INIT([LASH],[0.6.0])
 AC_CONFIG_SRCDIR([lash/types.h])
 AC_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE
-#AM_ACLOCAL_INCLUDE([m4])
+AC_CONFIG_MACRO_DIR([m4])
 
 
 ### Check for programs ###

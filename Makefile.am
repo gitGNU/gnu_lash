@@ -1,4 +1,5 @@
 SUBDIRS = m4 docs lash common dbus liblash lashd clients icons pylash
+ACLOCAL_AMFLAGS = -I m4
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = lash-1.0.pc
