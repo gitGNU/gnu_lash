@@ -3,7 +3,7 @@
  *
  *   Copyright (C) 2002 Robert Ham <rah@bash.sh>
  *   Copyright (C) 2005-2008 Dave Robillard <dave@drobilla.net>
- *   Copyright (C) 2007-2008 Nedko Arnaudov <nedko@arnaudov.name>
+ *   Copyright (C) 2007-2009 Nedko Arnaudov <nedko@arnaudov.name>
  *   Copyright (C) 2008-2009 Juuso Alasuutari <juuso.alasuutari@gmail.com>
  *
  *   This program is free software; you can redistribute it and/or modify
