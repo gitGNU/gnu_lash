@@ -22,14 +22,6 @@ liblash_la_SOURCES += $(top_srcdir)/dbus/introspection.c
 liblash_la_SOURCES += $(top_srcdir)/dbus/service.c
 liblash_la_SOURCES += $(top_srcdir)/lashd/file.c
 
-if LASH_OLD_API
-liblash_la_SOURCES += protocol.c
-liblash_la_SOURCES += event.c
-liblash_la_SOURCES += event.h
-liblash_la_SOURCES += args.c
-liblash_la_SOURCES += args.h
-endif
-
 AM_CFLAGS = $(LASH_CFLAGS) $(DBUS_CFLAGS) -DDEBUG_OUTPUT_TERMINAL
 
 liblash_la_LIBADD = \

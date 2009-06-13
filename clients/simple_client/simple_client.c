@@ -1,8 +1,9 @@
 /*
  *   LASH
- *    
+ *
+ *   Copyright (C) 2008 Juuso Alasuutari <juuso.alasuutari@gmail.com>
  *   Copyright (C) 2002 Robert Ham <rah@bash.sh>
- *    
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
  *   the Free Software Foundation; either version 2 of the License, or
@@ -18,193 +19,152 @@
  *   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 #include <unistd.h>
-#include <alloca.h>
 
 #include <jack/jack.h>
 #include <alsa/asoundlib.h>
-
 #include <lash/lash.h>
 
-char *
-catdup(
-	const char * str1,
-	const char * str2)
-{
-	char * str;
-	size_t str1_len;
-	size_t str2_len;
+#define info(fmt, args...) printf(fmt "\n", ## args)
+#define error(fmt, args...) fprintf(stderr, "%s: " fmt "\n", __FUNCTION__, ## args)
 
-	str1_len = strlen(str1);
-	str2_len = strlen(str2);
-
-	str = malloc(str1_len + str2_len + 1);
-	if (str == NULL)
-	{
-		return NULL;
-	}
-
-	memcpy(str, str1, str1_len);
-	memcpy(str + str1_len, str2, str2_len);
-	str[str1_len + str2_len] = 0;
-
-	return str;
-}
+/* Callback function prototypes */
+static bool save_cb(lash_config_handle_t *handle, void *user_data);
+static bool load_cb(lash_config_handle_t *handle, void *user_data);
+static bool quit_cb(void *user_data);
 
 int
-main(int argc, char **argv)
+main(int    argc,
+     char **argv)
 {
-	lash_event_t *event;
-	lash_config_t *config;
 	lash_client_t *client;
 	jack_client_t *jack_client;
 	snd_seq_t *aseq;
 	snd_seq_client_info_t *aseq_client_info;
 	char client_name[64];
-	int err;
-	int done = 0;
+	bool done = false;
 
 	sprintf(client_name, "lsec_%d", getpid());
-	printf("%s: client name: '%s'\n", __FUNCTION__, client_name);
+	info("Client name: '%s'", client_name);
 
-	printf("%s: attempting to initialise lash\n", __FUNCTION__);
+	info("Attempting to initialise LASH");
 
-	client = lash_init(lash_extract_args(&argc, &argv), "LASH Simple Client",
-					   LASH_Config_Data_Set | LASH_Config_File,
-					   LASH_PROTOCOL(2, 0));
-
+	client = lash_client_open("LASH Simple Client", LASH_Config_Data_Set,
+	                          argc, argv);
 	if (!client) {
-		fprintf(stderr, "%s: could not initialise lash\n", __FUNCTION__);
-		exit(1);
+		error("Could not initialise LASH");
+		return EXIT_FAILURE;
 	}
 
-	printf("%s: initialised\n", __FUNCTION__);
+	info("Connected to LASH with client name '%s'\n"
+	     "Associated with project '%s'",
+	     lash_get_client_name(client),
+	     lash_get_project_name(client));
 
-	event = lash_event_new_with_type(LASH_Client_Name);
-	lash_event_set_string(event, client_name);
-	lash_send_event(client, event);
-
-	/*
-	 * jack ports
-	 */
-	printf("%s: connecting to jack server\n", __FUNCTION__);
+	/* JACK */
+	info("Connecting to JACK server");
 	jack_client = jack_client_open(client_name, JackNullOption, NULL);
 	if (!jack_client) {
-		printf("%s: could not connect to jack server", __FUNCTION__);
-		exit(1);
+		error("Could not connect to JACK server");
+		return EXIT_FAILURE;
 	}
-	printf("%s: connected to jack with client name '%s'\n", __FUNCTION__,
-		   client_name);
+	info("Connected to JACK with client name '%s'", client_name);
 
-	printf("%s: opening alsa sequencer\n", __FUNCTION__);
-	err = snd_seq_open(&aseq, "default", SND_SEQ_OPEN_DUPLEX, 0);
-	if (err) {
-		printf("%s: could not open alsa sequencer\n", __FUNCTION__);
-		exit(1);
+	/* ALSA */
+	info("Opening ALSA sequencer");
+	if (snd_seq_open(&aseq, "default", SND_SEQ_OPEN_DUPLEX, 0) != 0) {
+		error("Could not open ALSA sequencer");
+		return EXIT_FAILURE;
 	}
 	snd_seq_client_info_alloca(&aseq_client_info);
 	snd_seq_get_client_info(aseq, aseq_client_info);
 	snd_seq_client_info_set_name(aseq_client_info, client_name);
 	snd_seq_set_client_info(aseq, aseq_client_info);
-	printf("%s: opened alsa sequencer with id %d, name '%s'\n",
-		   __FUNCTION__, snd_seq_client_id(aseq), client_name);
+	info("Opened ALSA sequencer with ID %d, name '%s'",
+	     snd_seq_client_id(aseq), client_name);
 
-	event = lash_event_new_with_type(LASH_Jack_Client_Name);
-	lash_event_set_string(event, client_name);
-	lash_send_event(client, event);
+	lash_jack_client_name(client, client_name);
+	lash_alsa_client_id(client, (unsigned char) snd_seq_client_id(aseq));
 
-	event = lash_event_new_with_type(LASH_Alsa_Client_ID);
-	client_name[0] = (char)snd_seq_client_id(aseq);
-	client_name[1] = '\0';
-	printf("alsa client id: %d\n", snd_seq_client_id(aseq));
-	lash_event_set_string(event, client_name);
-	lash_send_event(client, event);
+	lash_set_save_data_set_callback(client, save_cb, NULL);
+	lash_set_load_data_set_callback(client, load_cb, NULL);
+	lash_set_quit_callback(client, quit_cb, &done);
 
 	while (!done) {
-		printf("%s: trying to get events and configs\n", __FUNCTION__);
-
-		event = lash_get_event(client);
-		if (event) {
-			printf("%s: got event of type %d with string '%s'\n",
-				   __FUNCTION__, lash_event_get_type(event),
-				   lash_event_get_string(event));
-			switch (lash_event_get_type(event)) {
-			case LASH_Save_Data_Set:
-				config = lash_config_new_with_key("test config");
-				lash_config_set_value_string(config,
-											 "this is some configuration data");
-				lash_send_config(client, config);
-				lash_send_event(client, event);
-				break;
-			case LASH_Restore_Data_Set:
-				while ((config = lash_get_config(client))) {
-					printf("%s: got config with key '%s', value_size %d\n",
-					       __FUNCTION__, lash_config_get_key(config),
-					       lash_config_get_value_size(config));
-					lash_config_destroy(config);
-				}
-				lash_send_event(client, event);
-				break;
-			case LASH_Save_File:
-			{
-				FILE *config_file;
-				char *file_path;
-
-				file_path = catdup(lash_event_get_string(event), "simple-client.data");
-				config_file = fopen(file_path, "w");
-				free(file_path);
-				fprintf(config_file, "lash simple client data");
-				fclose(config_file);
-				printf("wrote config file\n");
-				lash_send_event(client, event);
-				break;
-			}
-			case LASH_Restore_File:
-			{
-				FILE *config_file;
-				char *buf = NULL;
-				size_t buf_size = 0;
-				char *file_path;
-
-				file_path = catdup(lash_event_get_string(event), "simple-client.data");
-				config_file = fopen(file_path, "r");
-				free(file_path);
-				if (config_file) {
-					getline(&buf, &buf_size, config_file);
-					fclose(config_file);
-				}
-
-				printf("read data from config file: '%s'\n", buf);
-				if (buf)
-					free(buf);
-
-				lash_send_event(client, event);
-				break;
-			}
-			case LASH_Quit:
-				printf("server told us to quit; exiting\n");
-				done = 1;
-				break;
-
-			case LASH_Server_Lost:
-				printf("server connection lost; exiting\n");
-				exit(0);
-				break;
-
-			default:
-				fprintf(stderr,
-						"%s: recieved unknown LASH event of type %d\n",
-						__FUNCTION__, lash_event_get_type(event));
-				lash_event_destroy(event);
-				break;
-			}
-		}
-
-		sleep(5);
+		lash_wait(client);
+		lash_dispatch(client);
 	}
 
-	return 0;
+	info("Bye!");
+
+	return EXIT_SUCCESS;
+}
+
+static bool
+save_cb(lash_config_handle_t *handle,
+        void                 *user_data)
+{
+	info("Received SaveDataSet message");
+
+	const char *name = "lash_simple_client";
+	double version = 1.0;
+	uint64_t revision = 1;
+	const char *raw_data = "some raw data";
+
+	lash_config_write(handle, "name", &name, LASH_TYPE_STRING);
+	lash_config_write(handle, "version", &version, LASH_TYPE_DOUBLE);
+	lash_config_write(handle, "revision", &revision, LASH_TYPE_INTEGER);
+	/* Write a string as raw data without the terminating NUL */
+	lash_config_write_raw(handle, "raw_data", raw_data, strlen(raw_data));
+
+	return true;
+}
+
+static bool
+load_cb(lash_config_handle_t *handle,
+        void                 *user_data)
+{
+	info("Received LoadDataSet message");
+
+	const char *key;
+	int ret, type;
+
+	union {
+		double      d;
+		uint32_t    u;
+		const char *s;
+	} value;
+
+	while ((ret = lash_config_read(handle, &key, &value, &type))) {
+		if (ret == -1) {
+			error("Failed to read data set");
+			return false;
+		}
+
+		if (type == LASH_TYPE_DOUBLE)
+			info("  \"%s\" : %f", key, value.d);
+		else if (type == LASH_TYPE_INTEGER)
+			info("  \"%s\" : %u", key, value.u);
+		else if (type == LASH_TYPE_STRING)
+			info("  \"%s\" : \"%s\"", key, value.s);
+		else if (type == LASH_TYPE_RAW)
+			info("  \"%s\" : <raw data>", key);
+		else
+			error("Unknown config type");
+	}
+
+	return true;
+}
+
+static bool
+quit_cb(void *user_data)
+{
+	info("Received Quit message");
+	*((bool *) user_data) = true;
+	return true;
 }

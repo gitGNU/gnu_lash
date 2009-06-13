@@ -34,11 +34,6 @@
 #include "client.h"
 #include "lash_config.h"
 
-#ifdef LASH_OLD_API
-# include "lash/event.h"
-# include "lash/config.h"
-#endif
-
 #define client_ptr ((lash_client_t *)(((object_path_t *)call->context)->context))
 
 static void
@@ -164,19 +159,6 @@ lash_new_save_task(lash_client_t *client,
 		}
 
 		client->pending_task = 0;
-	} else {
-#ifdef LASH_OLD_API
-		/* Create a Save event and add it to the incoming queue */
-		lash_event_t *event;
-		if (!(event = lash_event_new_with_all(LASH_Save_File,
-		                                      client->data_path))) {
-			lash_error("Failed to allocate lash_event_t");
-			client->pending_task = 0;
-			return;
-		}
-
-		lash_client_add_event(client, event);
-#endif /* LASH_OLD_API */
 	}
 }
 
@@ -274,22 +256,9 @@ lash_dbus_load(method_call_t *call)
 
 		client_ptr->pending_task = 0;
 	} else {
-#ifndef LASH_OLD_API
 		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
 		                "Load callback not registered");
 		client_ptr->pending_task = 0;
-#else /* LASH_OLD_API */
-		/* Create a Restore event and add it to the incoming queue */
-		lash_event_t *event;
-		if (!(event = lash_event_new_with_all(LASH_Restore_File,
-		                                      client_ptr->data_path))) {
-			lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-			                "Failed to allocate lash_event_t");
-			return;
-		}
-
-		lash_client_add_event(client_ptr, event);
-#endif /* LASH_OLD_API */
 	}
 }
 
@@ -300,18 +269,11 @@ lash_new_save_data_set_task(lash_client_t *client,
 	method_msg_t *new_call;
 	DBusMessageIter *iter, *array_iter;
 
-/* An ugly hack for the backwards compat API */
-#ifdef LASH_OLD_API
-	new_call = &client->unsent_configs;
-	iter = &client->iter;
-	array_iter = &client->array_iter;
-#else /* !LASH_OLD_API */
 	method_msg_t _new_call;
 	DBusMessageIter _iter, _array_iter;
 	new_call = &_new_call;
 	iter = &_iter;
 	array_iter = &_array_iter;
-#endif
 
 	client->pending_task = task_id;
 	client->task_progress = 0;
@@ -367,18 +329,8 @@ lash_new_save_data_set_task(lash_client_t *client,
 
 		client->pending_task = 0;
 	} else {
-#ifndef LASH_OLD_API
 		lash_error("SaveDataSet callback not registered");
 		goto fail;
-#else /* LASH_OLD_API */
-		/* Create a SaveDataSet event and add it to the incoming queue */
-		lash_event_t *event;
-		if (!(event = lash_event_new_with_type(LASH_Save_Data_Set))) {
-			lash_error("Failed to allocate lash_event_t");
-			goto fail;
-		}
-		lash_client_add_event(client, event);
-#endif /* LASH_OLD_API */
 	}
 
 	return;
@@ -454,64 +406,9 @@ lash_dbus_load_data_set(method_call_t *call)
 
 		client_ptr->pending_task = 0;
 	} else {
-#ifndef LASH_OLD_API
 		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
 		                "LoadDataSet callback not registered");
 		client_ptr->pending_task = 0;
-#else /* LASH_OLD_API */
-		const char *key;
-		int ret, type;
-
-		union {
-			double      d;
-			uint32_t    u;
-			const char *s;
-			const void *v;
-		} value;
-
-		lash_event_t *event;
-		lash_config_t *config;
-
-		event = lash_event_new_with_type(LASH_Restore_Data_Set);
-		if (!event) {
-			lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-			                "Failed to allocate lash_event_t");
-			client_ptr->pending_task = 0;
-			return;
-		}
-		lash_client_add_event(client_ptr, event);
-
-		while ((ret = lash_config_read(&cfg, &key, &value, &type))) {
-			if (ret == -1) {
-				lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-				                "Failed to read data set");
-				break;
-			}
-
-			config = lash_config_new_with_key(key);
-			if (!config) {
-				lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-				                "Failed to allocate lash_config_t");
-				break;
-			}
-
-			if (type == LASH_TYPE_DOUBLE)
-				lash_config_set_value_double(config, value.d);
-			else if (type == LASH_TYPE_INTEGER)
-				lash_config_set_value_int(config, value.u);
-			else if (type == LASH_TYPE_STRING)
-				lash_config_set_value_string(config, value.s);
-			else if (type == LASH_TYPE_RAW)
-				lash_config_set_value(config, value.v, (size_t) ret);
-			else {
-				lash_error("Unknown config type '%c'", type);
-				lash_config_destroy(config);
-				continue;
-			}
-
-			lash_client_add_config(client_ptr, config);
-		}
-#endif /* LASH_OLD_API */
 	}
 }
 
@@ -525,18 +422,7 @@ lash_new_quit_task(lash_client_t *client)
 	if (client->cb.quit) {
 		client->cb.quit(client->ctx.quit);
 	} else {
-#ifndef LASH_OLD_API
 		lash_error("Quit callback not registered");
-#else /* LASH_OLD_API */
-		/* Create a Quit event and add it to the incoming queue */
-		lash_event_t *event;
-		if (!(event = lash_event_new_with_type(LASH_Quit))) {
-			lash_error("Failed to allocate lash_event_t");
-			return;
-		}
-
-		lash_client_add_event(client, event);
-#endif /* LASH_OLD_API */
 	}
 }
 

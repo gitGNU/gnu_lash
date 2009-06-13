@@ -33,10 +33,6 @@
 
 #include "lash/types.h"
 
-#ifdef LASH_OLD_API
-# include "common/klist.h"
-#endif
-
 struct _lash_client
 {
 	char       *class;
@@ -82,17 +78,6 @@ struct _lash_client
 		void                *load_data_set;
 		void                *control;
 	} ctx;
-
-#ifdef LASH_OLD_API
-	struct list_head events_in;
-	uint32_t         num_events_in;
-
-	struct list_head configs_in;
-	uint32_t         num_configs_in;
-
-	method_msg_t     unsent_configs;
-	DBusMessageIter  iter, array_iter;
-#endif
 };
 
 lash_client_t *
@@ -100,15 +85,5 @@ lash_client_new(void);
 
 void
 lash_client_destroy(lash_client_t *client);
-
-#ifdef LASH_OLD_API
-void
-lash_client_add_event(lash_client_t *client,
-                      lash_event_t  *event);
-
-void
-lash_client_add_config(lash_client_t *client,
-                       lash_config_t *config);
-#endif
 
 #endif /* __LIBLASH_CLIENT_H__ */

@@ -34,20 +34,4 @@ struct _lash_config_handle
 	bool             is_read;
 };
 
-
-#ifdef LASH_OLD_API
-# include <sys/types.h>
-# include "common/klist.h"
-
-struct _lash_config
-{
-	struct list_head  siblings;
-	char             *key;
-	void             *value;
-	size_t            value_size;
-	int               value_type;
-};
-
-#endif /* LASH_OLD_API */
-
 #endif /* __LIBLASH_CONFIG_H__ */

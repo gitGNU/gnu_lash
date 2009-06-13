@@ -39,32 +39,6 @@ fi
 
 
 ########################
-### --enable-old-api ###
-########################
-
-lash_old_api="yes"
-AC_MSG_CHECKING([whether to enable the old API])
-AC_ARG_ENABLE(old-api,
-  [AS_HELP_STRING(--enable-old-api, enable the old API [default=yes])],
-  [case "$enableval" in
-    "yes")
-      ;;
-    "no")
-      lash_old_api="no"
-      ;;
-    *)
-      AC_MSG_ERROR([must use --enable-old-api(=yes/no) or --disable-old-api])
-      ;;
-  esac]
-)
-if test "x$lash_old_api" = "xyes"; then
-  AC_MSG_RESULT([yes])
-else
-  AC_MSG_RESULT([no])
-fi
-
-
-########################
 ### --with-jack-dbus ###
 ########################
 
@@ -342,15 +316,6 @@ if test "x$MISSING_REQUIRED$MISSING_OPTIONAL" != "x"; then
 fi
 
 
-###############
-### Old API ###
-###############
-
-if test "x$lash_old_api" = "xyes"; then
-  AC_DEFINE(LASH_OLD_API, 1, [whether or not to enable the old API])
-fi
-AM_CONDITIONAL(LASH_OLD_API, [test "x$lash_old_api" = "xyes"])
-
 ############
 ### JACK ###
 ############
@@ -569,7 +534,6 @@ AC_MSG_RESULT([
   Python bindings:       $lash_python
   HTML manual:           $lash_texi2html
   Debugging output:      $lash_debug
-  Support old API:       $lash_old_api
 
   JACK version:          $JACK_VERSION
   D-Bus version:         $DBUS_VERSION
