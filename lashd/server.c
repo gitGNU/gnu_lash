@@ -560,7 +560,7 @@ server_project_restore(project_t *project)
 
 	lashd_dbus_signal_emit_project_appeared(project->name, project->directory);
 
-	project->task_type = LASH_TASK_LOAD;
+	project->task_type = LASH_EVENT_LOAD;
 	project->client_tasks_total = project->client_tasks_progress = 0;
 
 	/* Signal beginning of task */

@@ -483,7 +483,7 @@ project_save_clients(project_t *project)
 		}
 	}
 
-	project->task_type = LASH_TASK_SAVE;
+	project->task_type = LASH_EVENT_SAVE;
 	project->client_tasks_total = 0;
 	project->client_tasks_progress = 0;
 	++g_server->task_iter;

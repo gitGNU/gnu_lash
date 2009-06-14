@@ -27,21 +27,15 @@
 #include <uuid/uuid.h>
 #include <libxml/tree.h>
 
-#include "common/klist.h"
-
 #include "types.h"
+#include "common/klist.h"
+#include "lash/types.h"
 
 #define PROJECT_ID_DIR      ".id"
 #define PROJECT_CONFIG_DIR  ".config"
 #define PROJECT_INFO_FILE   ".lash_info"
 #define PROJECT_NOTES_FILE  ".notes"
 #define PROJECT_XML_VERSION "1.0"
-
-enum
-{
-	LASH_TASK_SAVE = 1,
-	LASH_TASK_LOAD
-};
 
 struct _project
 {
@@ -69,7 +63,7 @@ struct _project
 	struct list_head  lost_clients;
 
 	/* For task progress feedback (LASH_Percentage) */
-	int               task_type;
+	enum LashEvent    task_type;
 	uint32_t          client_tasks_total;
 	uint32_t          client_tasks_pending;
 	uint32_t          client_tasks_progress; // Min is 0, max is client_tasks_total*100
