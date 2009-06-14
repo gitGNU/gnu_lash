@@ -73,8 +73,8 @@ print_help(const char *argv0)
 	       "\n\n"
 	       "Usage: %s [OPTION]\n"
 	       "\n"
-	       "  -d, --default-dir PATH     store projects in $HOME/PATH\n\n",
-	       "  -h, --help                 display this help and exit\n"
+	       "  -d, --default-dir PATH     store projects in $HOME/PATH\n"
+	       "  -h, --help                 display this help and exit\n\n",
 	       PACKAGE_VERSION, LASH_JACK_VERSION, LASH_DBUS_VERSION, LASH_XML2_VERSION,
 #ifdef HAVE_ALSA
 	       LASH_ALSA_VERSION,
