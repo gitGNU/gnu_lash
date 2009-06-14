@@ -22,11 +22,9 @@
 #ifndef PROCFS_H__604D0D94_1609_4BB4_BFA7_5DC47830011A__INCLUDED
 #define PROCFS_H__604D0D94_1609_4BB4_BFA7_5DC47830011A__INCLUDED
 
-bool
+char *
 procfs_get_process_cmdline(
-	unsigned long long pid,
-	int * argc_ptr,
-	char *** argv_ptr);
+	unsigned long long pid);
 
 char *
 procfs_get_process_cwd(
