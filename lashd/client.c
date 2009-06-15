@@ -190,19 +190,14 @@ client_task_completed(struct lash_client *client,
 
 	switch (client->task_type) {
 	case LASH_Save_Data_Set:
-		if (was_succesful) {
-			if (store_write(client->store))
-				client->flags |= LASH_Saved;
-			else
-				lash_error("Client '%s' could not write data "
-				           "to disk (task %llu)",
-				           client_get_identity(client),
-				           client->pending_task);
+		if (was_succesful && !store_write(client->store)) {
+			lash_error("Client '%s' could not write data "
+			           "to disk (task %llu)",
+			           client_get_identity(client),
+			           client->pending_task);
 		}
 		break;
 	case LASH_Save_File:
-		if (was_succesful)
-			client->flags |= LASH_Saved;
 		break;
 	case LASH_Restore_File:
 	case LASH_Restore_Data_Set:
@@ -382,8 +377,6 @@ client_maybe_fill_class(struct lash_client *client)
 void
 client_resume_project(struct lash_client *client)
 {
-	bool stateless_client;
-
 	lash_debug("Attempting to resume client of class '%s'",
 	           client->class);
 
@@ -399,24 +392,14 @@ client_resume_project(struct lash_client *client)
 	/* Unlink client from project's lost_clients list */
 	list_del(&client->siblings);
 
-	stateless_client = false;
-
-	/* Tell the client to load its state if it was saved previously */
-	if (CLIENT_SAVED(client)) {
-		if (CLIENT_CONFIG_FILE(client))
-			project_load_file(client->project, client);
-		else if (CLIENT_CONFIG_DATA_SET(client))
-			project_load_data_set(client->project, client);
-		else {
-			/* this is a workaround for projects saved with wrong flags */
-			lash_warn("Client '%s' has no data to load even though "
-			          "it claims to have", client_get_identity(client));
-			stateless_client = true;
-		}
-	} else {
-		lash_debug("Client '%s' has no data to load", client_get_identity(client));
-		stateless_client = true;
-	}
+	/* Tell the client to load its state */
+	if (CLIENT_CONFIG_FILE(client))
+		project_load_file(client->project, client);
+	else if (CLIENT_CONFIG_DATA_SET(client))
+		project_load_data_set(client->project, client);
+	else
+		lash_warn("Client '%s' has no data to load even though "
+		          "it claims to have", client_get_identity(client));
 
 	/* Link client to project's clients list */
 	list_add(&client->siblings, &client->project->clients);
@@ -431,15 +414,6 @@ client_resume_project(struct lash_client *client)
 
 	lashd_dbus_signal_emit_client_appeared(client->id_str, client->project->name,
 	                                       client->name);
-
-	/* Clients with nothing to load need to notify about
-	   their completion as soon as they appear */
-	if (stateless_client) {
-		/* Nasty way to make project_client_task_completed() eventually call project_loaded() */
-		client->task_type = LASH_Restore_Data_Set;
-		project_client_task_completed(client->project, client);
-		client->task_type = 0;
-	}
 }
 
 struct lash_client *
