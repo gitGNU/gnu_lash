@@ -530,7 +530,9 @@ lashd_jackdbus_on_client_appeared(
 	struct lash_client * client_ptr;
 	jack_mgr_client_t * jack_client_ptr;
 
-	pid = lashd_jackdbus_get_client_pid(client_id);
+	/* Not finding a PID means the client died before we got this signal */
+	if ((pid = lashd_jackdbus_get_client_pid(client_id)) <= 0)
+		return;
 
 	lash_debug("New JACK client '%s' with id %llu, pid %lld",
 	           client_name, (unsigned long long)client_id, (long long)pid);
