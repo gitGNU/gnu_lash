@@ -24,7 +24,6 @@
 
 #include "client.h"
 #include "common/debug.h"
-#include "lash/config.h"
 #include "dbus/method.h"
 
 static inline bool

@@ -23,7 +23,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <lash/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -113,47 +112,58 @@ lash_dispatch(lash_client_t *client);
 bool
 lash_dispatch_once(lash_client_t *client);
 
+/**
+ * Append a key-value pair of data to a Save message.
+ *
+ * @param client LASH client pointer.
+ * @param key The key string pointer.
+ * @param value The value pointer. For doubles and integers, must point to
+ *              the desired value to append. For strings and raw data, must
+ *              point to a pointer to the first element of the array to append.
+ *              The simplest way to ensure all this is to store the value in a
+ *              \ref lash_value_t variable and pass a pointer to that.
+ * @param type The value type. Must be \ref LASH_TYPE_DOUBLE,
+ *             \ref LASH_TYPE_INTEGER, \ref LASH_TYPE_STRING, or
+ *             \ref LASH_TYPE_RAW. Setting this to \ref LASH_TYPE_RAW
+ *             makes the \a size argument mandatory.
+ * @param size The length of the value data. Only required when \a type is
+ *             \ref LASH_TYPE_RAW, otherwise ignored.
+ * @return True if writing data succeeded, false otherwise.
+ */
+bool
+lash_write(lash_client_t       *client,
+           const char          *key,
+           const void          *value,
+           const enum LashType  type,
+           const int            size);
+
+/**
+ * Read a key-value pair of data from a Load message.
+ *
+ * @param client LASH client pointer.
+ * @param key_ptr A pointer to the memory location in which to
+ *        save the key pointer.
+ * @param value_ptr A pointer to the memory location in which to
+ *        save the value pointer.
+ * @param type_ptr A pointer to the memory location in which to
+ *        save the value type.
+ * @return If reading succeeds the return value will be equal to the
+ *         config value's size in bytes (for strings this includes the
+ *         terminating NUL). If no data remains in the message the return
+ *         value will 0, and -1 if an error occurred during reading.
+ */
+int
+lash_read(lash_client_t  *client,
+          const char    **key_ptr,
+          void           *value_ptr,
+          enum LashType  *type_ptr);
+
 void
 lash_notify_progress(lash_client_t *client,
                      uint8_t        percentage);
 
-lash_client_t *
-lash_client_open_controller(void);
-
-/**
- * Set the controller callback function.
- */
-bool
-lash_set_control_callback(lash_client_t       *client,
-                          LashControlCallback  callback,
-                          void                *user_data);
-
-void
-lash_control_load_project_path(lash_client_t *client,
-                               const char    *project_path);
-
-void
-lash_control_name_project(lash_client_t *client,
-                          const char    *project_name,
-                          const char    *new_name);
-
-void
-lash_control_move_project(lash_client_t *client,
-                          const char    *project_name,
-                          const char    *new_path);
-
-void
-lash_control_save_project(lash_client_t *client,
-                          const char    *project_name);
-
-void
-lash_control_close_project(lash_client_t *client,
-                           const char    *project_name);
-
-
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* __LASH_CLIENT_INTERFACE_H_ */

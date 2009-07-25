@@ -25,8 +25,8 @@
 #define __LASH_H__
 
 #include <lash/types.h>
-#include <lash/config.h>
 #include <lash/client_interface.h>
+#include <lash/control_interface.h>
 
 /** @defgroup LASH LASH public API
  * @brief The public API of the LASH library
