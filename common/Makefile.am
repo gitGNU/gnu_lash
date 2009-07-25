@@ -4,4 +4,5 @@ noinst_HEADERS = \
 	klist.h \
 	error.h \
 	safety.h \
-	safety.c
+	safety.c \
+	types.h

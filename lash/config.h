@@ -22,52 +22,42 @@
 #ifndef __LASH_CONFIG_H__
 #define __LASH_CONFIG_H__
 
-#include <stdbool.h>
-
 #include <lash/types.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * Append a key-value pair of typed data to a config message.
+ * Append a key-value pair of data to a Save message.
  *
- * @param handle An opaque config message handle passed
- *        to the callback function by liblash.
+ * @param client LASH client pointer.
  * @param key The key string pointer.
- * @param value The value pointer.
- * @param type The value type. Must be one out of \ref LASH_TYPE_DOUBLE,
- *        \ref LASH_TYPE_INTEGER, and \ref LASH_TYPE_STRING.
- * @return True if writing succeeded, false otherwise.
+ * @param value The value pointer. For doubles and integers, must point to
+ *              the desired value to append. For strings and raw data, must
+ *              point to a pointer to the first element of the array to append.
+ *              The simplest way to ensure all this is to store the value in a
+ *              \ref lash_value_t variable and pass a pointer to that.
+ * @param type The value type. Must be \ref LASH_TYPE_DOUBLE,
+ *             \ref LASH_TYPE_INTEGER, \ref LASH_TYPE_STRING, or
+ *             \ref LASH_TYPE_RAW. Setting this to \ref LASH_TYPE_RAW
+ *             makes the \a size argument mandatory.
+ * @param size The length of the value data. Only required when \a type is
+ *             \ref LASH_TYPE_RAW, otherwise ignored.
+ * @return True if writing data succeeded, false otherwise.
  */
 bool
-lash_config_write(lash_config_handle_t *handle,
-                  const char           *key,
-                  const void           *value,
-                  int                   type);
+lash_write(lash_client_t       *client,
+           const char          *key,
+           const void          *value,
+           const enum LashType  type,
+           const int            size);
 
 /**
- * Append a key-value pair of raw data to a config message.
+ * Read a key-value pair of data from a Load message.
  *
- * @param handle An opaque config message handle passed
- *        to the callback function by liblash.
- * @param key The key string pointer.
- * @param buf The data buffer pointer.
- * @param size The size of the data buffer in bytes.
- * @return True if writing succeeded, false otherwise.
- */
-bool
-lash_config_write_raw(lash_config_handle_t *handle,
-                      const char           *key,
-                      const void           *buf,
-                      int                   size);
-
-/**
- * Read a key-value pair of data from a config message.
- *
- * @param handle An opaque config message handle passed
- *        to the callback function by liblash.
+ * @param client LASH client pointer.
  * @param key_ptr A pointer to the memory location in which to
  *        save the key pointer.
  * @param value_ptr A pointer to the memory location in which to
@@ -80,10 +70,10 @@ lash_config_write_raw(lash_config_handle_t *handle,
  *         value will 0, and -1 if an error occurred during reading.
  */
 int
-lash_config_read(lash_config_handle_t  *handle,
-                 const char           **key_ptr,
-                 void                  *value_ptr,
-                 int                   *type_ptr);
+lash_read(lash_client_t  *client,
+          const char    **key_ptr,
+          void           *value_ptr,
+          enum LashType  *type_ptr);
 
 #ifdef __cplusplus
 }

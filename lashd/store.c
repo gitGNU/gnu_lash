@@ -610,7 +610,7 @@ fail:
 }
 
 /* Add an array of configs to a D-Bus message. Used to
-   create a LoadDataSet message to be sent to a client. */
+   create a Load message to be sent to a client. */
 bool
 store_create_config_array(store_t         *store,
                           DBusMessageIter *iter)

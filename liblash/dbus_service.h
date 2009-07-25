@@ -21,15 +21,19 @@
 #ifndef __LIBLASH_DBUS_SERVICE_H__
 #define __LIBLASH_DBUS_SERVICE_H__
 
-#include "lash/types.h"
+#include <stdbool.h>
 
+#include "lash/types.h"
 #include "dbus/types.h"
 
 service_t *
 lash_dbus_service_new(lash_client_t *client);
 
-void
+bool
 lash_dbus_service_connect(lash_client_t *client);
+
+bool
+lash_dbus_service_activate(lash_client_t *client);
 
 /* The appropriate destructor is service_destroy() in dbus/service.c */
 

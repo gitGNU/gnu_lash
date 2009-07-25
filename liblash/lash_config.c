@@ -1,8 +1,7 @@
 /*
  *   LASH
  *
- *   Copyright (C) 2008 Juuso Alasuutari <juuso.alasuutari@gmail.com>
- *   Copyright (C) 2002 Robert Ham <rah@bash.sh>
+ *   Copyright (C) 2008-2009 Juuso Alasuutari <juuso.alasuutari@gmail.com>
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -23,30 +22,40 @@
 #include <arpa/inet.h>
 #include <rpc/xdr.h>
 
+#include "client.h"
 #include "common/debug.h"
-
 #include "lash/config.h"
-
-#include "lash_config.h"
-
 #include "dbus/method.h"
 
-bool
-lash_config_write(lash_config_handle_t *handle,
-                  const char           *key,
-                  const void           *value,
-                  int                   type)
+static inline bool
+init_write(lash_client_t *client)
 {
-	if (!handle || !key || !key[0] || !value) {
-		lash_error("Invalid arguments");
+	if (client->task_event != LASH_EVENT_SAVE) {
+		lash_error("Can only write data during a Save operation");
 		return false;
 	}
 
+	if (!client->task_msg.message && !lash_client_init_task_msg(client)) {
+		lash_error("Failed to initialize task message");
+		return false;
+	}
+
+	return true;
+}
+
+bool
+lash_write(lash_client_t       *client,
+           const char          *key,
+           const void          *value,
+           const enum LashType  type,
+           const int            size)
+{
 	const void *value_ptr;
 	char buf[8];
 
-	if (handle->is_read) {
-		lash_error("Cannot write config data during a LoadDataSet operation");
+if (type == LASH_TYPE_STRING) lash_debug("!!!!!!!!!!! WRITING CONFIG %s = '%s'", key, *((const char **)value));
+	if (!client || !key || !key[0] || !value) {
+		lash_error("Invalid arguments");
 		return false;
 	}
 
@@ -61,42 +70,19 @@ lash_config_write(lash_config_handle_t *handle,
 	} else if (type == LASH_TYPE_INTEGER) {
 		*((uint32_t *) buf) = htonl(*((uint32_t *) value));
 		value_ptr = buf;
-	} else if (type == LASH_TYPE_STRING) {
+	} else if (type == LASH_TYPE_STRING || type == LASH_TYPE_RAW) {
 		value_ptr = value;
 	} else {
 		lash_error("Invalid value type %i", type);
 		return false;
 	}
 
+	if (!init_write(client))
+		return false;
+
 	lash_debug("Writing config \"%s\" of type '%c'", key, (char) type);
 
-	if (!method_iter_append_dict_entry(handle->iter, type, key, value_ptr, 0)) {
-		lash_error("Failed to append dict entry");
-		return false;
-	}
-
-	return true;
-}
-
-bool
-lash_config_write_raw(lash_config_handle_t *handle,
-                      const char           *key,
-                      const void           *buf,
-                      int                   size)
-{
-	if (!handle || !key || !key[0] || !buf || size < 1) {
-		lash_error("Invalid arguments");
-		return false;
-	}
-
-	if (handle->is_read) {
-		lash_error("Cannot write config data during a LoadDataSet operation");
-		return false;
-	}
-
-	lash_debug("Writing raw config \"%s\"", key);
-
-	if (!method_iter_append_dict_entry(handle->iter, LASH_TYPE_RAW, key, &buf, size)) {
+	if (!method_iter_append_dict_entry(&client->task_msg_array_iter, type, key, value_ptr, size)) {
 		lash_error("Failed to append dict entry");
 		return false;
 	}
@@ -105,34 +91,34 @@ lash_config_write_raw(lash_config_handle_t *handle,
 }
 
 int
-lash_config_read(lash_config_handle_t  *handle,
-                 const char           **key_ptr,
-                 void                  *value_ptr,
-                 int                   *type_ptr)
+lash_read(lash_client_t  *client,
+          const char    **key_ptr,
+          void           *value_ptr,
+          enum LashType  *type_ptr)
 {
-	if (!handle || !key_ptr || !value_ptr || !type_ptr) {
+	if (!client || !key_ptr || !value_ptr || !type_ptr) {
 		lash_error("Invalid arguments");
 		return -1;
 	}
 
 	int size;
 
-	if (!handle->is_read) {
-		lash_error("Cannot read config data during a SaveDataSet operation");
+	if (client->task_event != LASH_EVENT_LOAD) {
+		lash_error("Can only read data during a Load operation");
 		return -1;
 	}
 
 	/* No data left in message */
-	if (dbus_message_iter_get_arg_type(handle->iter) == DBUS_TYPE_INVALID)
+	if (dbus_message_iter_get_arg_type(&client->task_msg_array_iter) == DBUS_TYPE_INVALID)
 		return 0;
 
-	if (!method_iter_get_dict_entry(handle->iter, key_ptr, value_ptr,
-	                                type_ptr, &size)) {
+	if (!method_iter_get_dict_entry(&client->task_msg_array_iter, key_ptr,
+	                                value_ptr, (int *) type_ptr, &size)) {
 		lash_error("Failed to read config message");
 		return -1;
 	}
 
-	dbus_message_iter_next(handle->iter);
+	dbus_message_iter_next(&client->task_msg_array_iter);
 
 	if (*type_ptr == LASH_TYPE_DOUBLE) {
 		XDR x;

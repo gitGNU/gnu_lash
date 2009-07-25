@@ -25,6 +25,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
 
 #include <jack/jack.h>
 #include <alsa/asoundlib.h>
@@ -33,10 +35,10 @@
 #define info(fmt, args...) printf(fmt "\n", ## args)
 #define error(fmt, args...) fprintf(stderr, "%s: " fmt "\n", __FUNCTION__, ## args)
 
-/* Callback function prototypes */
-static bool save_cb(lash_config_handle_t *handle, void *user_data);
-static bool load_cb(lash_config_handle_t *handle, void *user_data);
-static bool quit_cb(void *user_data);
+/* Callback function prototype */
+static bool
+callback(enum LashEvent  type,
+         void           *user_data);
 
 int
 main(int    argc,
@@ -47,39 +49,34 @@ main(int    argc,
 	snd_seq_t *aseq;
 	snd_seq_client_info_t *aseq_client_info;
 	char client_name[64];
-	bool done = false;
+	int ret = EXIT_FAILURE;
 
 	sprintf(client_name, "lsec_%d", getpid());
 	info("Client name: '%s'", client_name);
 
-	info("Attempting to initialise LASH");
-
-	client = lash_client_open("LASH Simple Client", LASH_Config_Data_Set,
-	                          argc, argv);
-	if (!client) {
-		error("Could not initialise LASH");
+	/* LASH pt. 1 */
+	info("Connecting to LASH server");
+	if (!(client = lash_client_open("LASH Simple Client", 0, argc, argv))) {
+		error("Failed to open LASH client");
 		return EXIT_FAILURE;
 	}
-
-	info("Connected to LASH with client name '%s'\n"
-	     "Associated with project '%s'",
-	     lash_get_client_name(client),
-	     lash_get_project_name(client));
+	info("Connected to LASH server as %s client",
+	     lash_client_is_being_restored(client) ? "restoring" : "new");
 
 	/* JACK */
 	info("Connecting to JACK server");
 	jack_client = jack_client_open(client_name, JackNullOption, NULL);
 	if (!jack_client) {
-		error("Could not connect to JACK server");
-		return EXIT_FAILURE;
+		error("Failed to open JACK client");
+		goto end;
 	}
 	info("Connected to JACK with client name '%s'", client_name);
 
 	/* ALSA */
 	info("Opening ALSA sequencer");
 	if (snd_seq_open(&aseq, "default", SND_SEQ_OPEN_DUPLEX, 0) != 0) {
-		error("Could not open ALSA sequencer");
-		return EXIT_FAILURE;
+		error("Failed to open ALSA sequencer");
+		goto end2;
 	}
 	snd_seq_client_info_alloca(&aseq_client_info);
 	snd_seq_get_client_info(aseq, aseq_client_info);
@@ -88,51 +85,53 @@ main(int    argc,
 	info("Opened ALSA sequencer with ID %d, name '%s'",
 	     snd_seq_client_id(aseq), client_name);
 
-	lash_jack_client_name(client, client_name);
+	/* LASH pt. 2 */
 	lash_alsa_client_id(client, (unsigned char) snd_seq_client_id(aseq));
-
-	lash_set_save_data_set_callback(client, save_cb, NULL);
-	lash_set_load_data_set_callback(client, load_cb, NULL);
-	lash_set_quit_callback(client, quit_cb, &done);
-
-	while (!done) {
-		lash_wait(client);
-		lash_dispatch(client);
+	lash_set_client_callback(client, callback, client);
+	if (!lash_activate(client)) {
+		error("Failed to activate LASH client");
+		goto end3;
 	}
+	info("Client '%s' is associated with project '%s'",
+	     lash_get_client_name(client), lash_get_project_name(client));
+
+	pause();
 
 	info("Bye!");
 
-	return EXIT_SUCCESS;
+end3:
+	snd_seq_close(aseq);
+end2:
+	jack_client_close(jack_client);
+end:
+	lash_client_close(client);
+	return ret;
 }
 
 static bool
-save_cb(lash_config_handle_t *handle,
-        void                 *user_data)
+save(lash_client_t *client)
 {
-	info("Received SaveDataSet message");
-
 	const char *name = "lash_simple_client";
 	double version = 1.0;
-	uint64_t revision = 1;
+	uint32_t revision = 1;
 	const char *raw_data = "some raw data";
 
-	lash_config_write(handle, "name", &name, LASH_TYPE_STRING);
-	lash_config_write(handle, "version", &version, LASH_TYPE_DOUBLE);
-	lash_config_write(handle, "revision", &revision, LASH_TYPE_INTEGER);
+	lash_write(client, "name", &name, LASH_TYPE_STRING, 0);
+	lash_write(client, "version", &version, LASH_TYPE_DOUBLE, 0);
+	lash_write(client, "revision", &revision, LASH_TYPE_INTEGER, 0);
+
 	/* Write a string as raw data without the terminating NUL */
-	lash_config_write_raw(handle, "raw_data", raw_data, strlen(raw_data));
+	lash_write(client, "raw data", &raw_data, LASH_TYPE_RAW, strlen(raw_data));
 
 	return true;
 }
 
 static bool
-load_cb(lash_config_handle_t *handle,
-        void                 *user_data)
+load(lash_client_t *client)
 {
-	info("Received LoadDataSet message");
-
 	const char *key;
-	int ret, type;
+	int ret;
+	enum LashType type;
 
 	union {
 		double      d;
@@ -140,7 +139,7 @@ load_cb(lash_config_handle_t *handle,
 		const char *s;
 	} value;
 
-	while ((ret = lash_config_read(handle, &key, &value, &type))) {
+	while ((ret = lash_read(client, &key, &value, &type))) {
 		if (ret == -1) {
 			error("Failed to read data set");
 			return false;
@@ -162,9 +161,38 @@ load_cb(lash_config_handle_t *handle,
 }
 
 static bool
-quit_cb(void *user_data)
+callback(enum LashEvent  type,
+         void           *user_data)
 {
-	info("Received Quit message");
-	*((bool *) user_data) = true;
-	return true;
+	lash_client_t *client = user_data;
+
+	switch (type) {
+	case LASH_EVENT_TRYSAVE:
+	case LASH_EVENT_TRY_PATH_CHANGE:
+	case LASH_EVENT_CHANGE_PATH:
+		return true;
+	case LASH_EVENT_SAVE:
+		info("Client saving");
+		return save(client);
+	case LASH_EVENT_LOAD:
+		info("Client loading");
+		return load(client);
+	case LASH_EVENT_QUIT:
+		info("Client quitting");
+		kill(getpid(), SIGQUIT);
+		return true;
+	case LASH_EVENT_CHANGE_NAME:
+		info("Client name changed to '%s'", lash_get_client_name(client));
+		return true;
+	case LASH_EVENT_CHANGE_PROJECT:
+		info("Project changed to '%s'", lash_get_project_name(client));
+		return true;
+	case LASH_EVENT_CHANGE_PROJECT_NAME:
+		info("Project name changed to '%s'", lash_get_project_name(client));
+		return true;
+	case LASH_EVENT_INVALID:
+	default:
+		error("Received invalid event #%d", type);
+		return false;
+	}
 }

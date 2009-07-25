@@ -37,6 +37,7 @@
 
 #include "common/safety.h"
 #include "common/debug.h"
+#include "common/types.h"
 
 #include "lash/lash.h"
 
@@ -44,9 +45,32 @@
 
 #include "dbus_service.h"
 #include "client.h"
-#include "lash_config.h"
 
 #include "dbus_iface_client.h"
+
+static void *
+lash_client_thread(void *arg)
+{
+	lash_client_t *client = arg;
+
+	while (!client->quit) {
+		dbus_connection_read_write(client->dbus_service->connection, 250);
+		while (dbus_connection_get_dispatch_status(client->dbus_service->connection)
+		       == DBUS_DISPATCH_DATA_REMAINS) {
+			dbus_connection_dispatch(client->dbus_service->connection);
+		}
+	}
+
+	if (client->flags & LashClientIsOrdinary)
+		method_call_new_void(client->dbus_service, NULL,
+		                     method_default_handler, false,
+		                     "org.nongnu.LASH",
+		                     "/",
+		                     "org.nongnu.LASH.Server",
+		                     "Disconnect");
+
+	pthread_exit(NULL);
+}
 
 #if 0
 static void
@@ -111,15 +135,10 @@ lash_server_signal_handler(lash_client_t *client,
 		    || strcmp(client->project_name, project_name) != 0)
 			return;
 
-		if (!client->pending_task) {
-			if ((client->flags & LASH_Config_Data_Set))
-				lash_new_save_data_set_task(client, task_id);
-			else if ((client->flags & LASH_Config_File))
-				lash_new_save_task(client, task_id);
-		} else {
-			lash_error("Task %llu is unfinished",
-			                client->pending_task);
-		}
+		if (!client->pending_task)
+			lash_new_save_task(client, task_id);
+		else
+			lash_error("Task %llu is unfinished", client->pending_task);
 
 		//lash_info("Save signal for project '%s' processed.", project_name); fflush(stdout);
 
@@ -148,8 +167,8 @@ static void
 lash_project_name_changed_handler(lash_client_t *client,
                                   DBusMessage   *message)
 {
-	const char *old_name, *new_name;
 	DBusError err;
+	const char *old_name, *new_name;
 
 	dbus_error_init(&err);
 
@@ -174,8 +193,8 @@ lash_project_name_changed_handler(lash_client_t *client,
 	lash_strset(&client->project_name, new_name);
 
 	/* Call client's ProjectChanged callback */
-	if (client->cb.proj)
-		client->cb.proj(client->ctx.proj);
+	if (check_client_cb(client, NULL))
+		client->client_cb(LASH_EVENT_PROJECT_NAME_CHANGED, client->client_data);
 }
 
 static void
@@ -183,49 +202,49 @@ lash_control_signal_handler(lash_client_t *client,
                             const char    *member,
                             DBusMessage   *message)
 {
-	if (!client->cb.control) {
-		lash_error("Controller callback function is not set");
+	if (!client->control_cb) {
+		lash_error("Controller callback not registered");
 		return;
 	}
 
 	uint8_t sig_id;
-	enum LASH_Event_Type type;
 	dbus_bool_t ret;
 	DBusError err;
 	const char *str1, *str2;
 	unsigned char byte_var[2];
 	uuid_t id;
+	enum LashEvent type;
 
 	if (strcmp(member, "ProjectDisappeared") == 0) {
 		sig_id = 1;
-		type = LASH_Project_Remove;
+		type = LASH_EVENT_PROJECT_REMOVED;
 	} else if (strcmp(member, "ProjectAppeared") == 0) {
 		sig_id = 2;
-		type = LASH_Project_Add;
+		type = LASH_EVENT_PROJECT_ADDED;
 	} else if (strcmp(member, "ProjectNameChanged") == 0) {
 		sig_id = 3;
-		type = LASH_Project_Name;
+		type = LASH_EVENT_PROJECT_NAME_CHANGED;
 	} else if (strcmp(member, "ProjectPathChanged") == 0) {
 		sig_id = 4;
-		type = LASH_Project_Dir;
+		type = LASH_EVENT_PROJECT_PATH_CHANGED;
 	} else if (strcmp(member, "ClientAppeared") == 0) {
 		sig_id = 5;
-		type = LASH_Client_Add;
+		type = LASH_EVENT_PROJECT_CLIENT_ADDED;
 	} else if (strcmp(member, "ClientDisappeared") == 0) {
 		sig_id = 6;
-		type = LASH_Client_Remove;
+		type = LASH_EVENT_PROJECT_CLIENT_REMOVED;
 	} else if (strcmp(member, "ClientNameChanged") == 0) {
 		sig_id = 7;
-		type = LASH_Client_Name;
+		type = 	LASH_EVENT_CLIENT_NAME_CHANGED;
 	} else if (strcmp(member, "ClientJackNameChanged") == 0) {
 		sig_id = 8;
-		type = LASH_Jack_Client_Name;
+		type = LASH_EVENT_CLIENT_JACK_NAME_CHANGED;
 	} else if (strcmp(member, "ClientAlsaIdChanged") == 0) {
 		sig_id = 9;
-		type = LASH_Alsa_Client_ID;
+		type = LASH_EVENT_CLIENT_ALSA_ID_CHANGED;
 	} else if (strcmp(member, "Progress") == 0) {
 		sig_id = 10;
-		type = LASH_Percentage;
+		type = LASH_EVENT_SERVER_PROGRESS;
 	} else {
 		lash_error("Received unknown signal '%s'", member);
 		return;
@@ -275,7 +294,7 @@ lash_control_signal_handler(lash_client_t *client,
 	}
 
 	/* Call the control callback */
-	client->cb.control(type, str1, str2, id, client->ctx.control);
+	client->control_cb(type, str1, str2, id, client->control_data);
 }
 
 static DBusHandlerResult
@@ -311,16 +330,11 @@ lash_dbus_signal_handler(DBusConnection *connection,
 	} else if (strcmp(interface, "org.nongnu.LASH.Control") == 0) {
 		lash_debug("Received Control signal '%s'", member);
 
-		/* This arrangement is OK only so far as a normal client
-		   doesn't intercept more than one signal, ProjectNameChanged */
-		if (client->is_controller != 1) {
+		if (client->flags & LashClientIsOrdinary)
 			lash_project_name_changed_handler(client, message);
-			if (client->is_controller) {
-				lash_control_signal_handler(client, member, message);
-			}
-		} else {
+
+		if (client->flags & LashClientIsController)
 			lash_control_signal_handler(client, member, message);
-		}
 
 	} else if (strcmp(interface, "org.freedesktop.DBus") != 0) {
 		lash_error("Received signal from unknown interface '%s'",
@@ -370,10 +384,10 @@ lash_client_add_filter(lash_client_t **client)
 }
 
 lash_client_t *
-lash_client_open(const char  *class,
-                 int          flags,
-                 int          argc,
-                 char       **argv)
+lash_client_open(const char      *class,
+                 enum LashFlags   flags,
+                 int              argc,
+                 char           **argv)
 {
 	lash_client_t *client = NULL;
 
@@ -421,7 +435,7 @@ lash_client_open(const char  *class,
 	client->argc = argc;
 	client->argv = argv;
 	client->working_dir = lash_strdup(wd);
-	client->flags = flags;
+	client->flags = (uint32_t) flags;
 	lash_strset(&client->class, class);
 
 	dbus_error_init(&err);
@@ -445,12 +459,15 @@ lash_client_open(const char  *class,
 		}
 	}
 
-	lash_dbus_service_connect(client);
+	if (!lash_dbus_service_connect(client)) {
+		lash_error("Cannot connect to LASH server");
+		goto fail;
+	}
 
-	if (client->flags & LASH_Server_Interface) {
-		lash_client_register_as_controller(client);
-		client->flags ^= LASH_Server_Interface;
-		client->is_controller = 2;
+	if (client->flags & LashClientIsController
+	    && !lash_client_register_as_controller(client)) {
+		lash_error("Cannot register as controller");
+		goto fail;
 	}
 
 	/* Listen to the LASH server's client-facing beacon */
@@ -476,6 +493,7 @@ lash_client_open(const char  *class,
 		goto fail;
 	}
 
+	client->flags |= LashClientIsOrdinary;
 	lash_client_add_filter(&client);
 
 	goto end;
@@ -501,17 +519,37 @@ lash_client_open_controller(void)
 	}
 
 	if (!lash_client_register_as_controller(client)) {
+		lash_error("Cannot register as controller");
 		lash_client_destroy(client);
 		return NULL;
 	}
 
-	client->is_controller = 1;
+	client->flags |= LashClientIsController;
 	lash_client_add_filter(&client);
 
 	return client;
 }
 
 // TODO: Move lash_set_*_callback() args checking to a common function
+
+bool
+lash_set_client_callback(lash_client_t      *client,
+                         LashClientCallback  callback,
+                         void               *user_data)
+{
+	if (!client || !callback) {
+		lash_error("Invalid arguments");
+		return false;
+	} else if (!(client->flags & LashClientIsConnected)) {
+		lash_error("Not connected to server");
+		return false;
+	}
+
+	client->client_cb = callback;
+	client->client_data = user_data;
+
+	return true;
+}
 
 bool
 lash_set_control_callback(lash_client_t       *client,
@@ -526,161 +564,40 @@ lash_set_control_callback(lash_client_t       *client,
 		return false;
 	}
 
-	client->cb.control = callback;
-	client->ctx.control = user_data;
+	client->control_cb = callback;
+	client->control_data = user_data;
 
 	return true;
 }
 
 bool
-lash_set_save_callback(lash_client_t     *client,
-                       LashEventCallback  callback,
-                       void              *user_data)
+lash_activate(lash_client_t *client)
 {
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
+	int err;
+
+	if (!client) {
+		lash_error("Client pointer is NULL");
 		return false;
 	}
 
-	client->cb.save = callback;
-	client->ctx.save = user_data;
-
-	return true;
-}
-
-bool
-lash_set_load_callback(lash_client_t     *client,
-                       LashEventCallback  callback,
-                       void              *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
+	// TODO: Find some generic place for this
+	if (!client->dbus_service) {
+		lash_error("D-Bus service not running");
 		return false;
 	}
 
-	client->cb.load = callback;
-	client->ctx.load = user_data;
-
-	return true;
-}
-
-bool
-lash_set_save_data_set_callback(lash_client_t      *client,
-                                LashConfigCallback  callback,
-                                void               *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
+	/* Ordinary clients must send an Activate message. */
+	if ((client->flags & LashClientIsOrdinary) && !lash_dbus_service_activate(client)) {
+		lash_error("Cannot activate LASH client");
 		return false;
 	}
 
-	client->cb.save_data_set = callback;
-	client->ctx.save_data_set = user_data;
-
-	return true;
-}
-
-bool
-lash_set_load_data_set_callback(lash_client_t      *client,
-                                LashConfigCallback  callback,
-                                void               *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
+	if ((err = pthread_create(&client->thread_id, NULL, lash_client_thread, client))) {
+		lash_error("Cannot create client thread: %s", strerror(err));
 		return false;
 	}
 
-	client->cb.load_data_set = callback;
-	client->ctx.load_data_set = user_data;
-
-	return true;
-}
-
-bool
-lash_set_quit_callback(lash_client_t     *client,
-                       LashEventCallback  callback,
-                       void              *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
-		return false;
-	}
-
-	client->cb.quit = callback;
-	client->ctx.quit = user_data;
-
-	return true;
-}
-
-bool
-lash_set_name_change_callback(lash_client_t     *client,
-                              LashEventCallback  callback,
-                              void              *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
-		return false;
-	}
-
-	client->cb.name = callback;
-	client->ctx.name = user_data;
-
-	return true;
-}
-
-bool
-lash_set_project_change_callback(lash_client_t     *client,
-                                 LashEventCallback  callback,
-                                 void              *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
-		return false;
-	}
-
-	client->cb.proj = callback;
-	client->ctx.proj = user_data;
-
-	return true;
-}
-
-bool
-lash_set_path_change_callback(lash_client_t     *client,
-                              LashEventCallback  callback,
-                              void              *user_data)
-{
-	if (!client || !callback) {
-		lash_error("Invalid arguments");
-		return false;
-	} else if (!client->server_connected) {
-		lash_error("Not connected to server");
-		return false;
-	}
-
-	client->cb.path = callback;
-	client->ctx.path = user_data;
-
+	lash_info("LASH client activated");
 	return true;
 }
 
@@ -754,7 +671,7 @@ lash_get_project_name(lash_client_t *client)
 bool
 lash_client_is_being_restored(lash_client_t *client)
 {
-	return (client && (client->flags & LASH_Restored));
+	return (client && (client->flags & LashClientIsRestored));
 }
 
 void
@@ -949,7 +866,7 @@ lash_control_close_project(lash_client_t *client,
 int
 lash_server_connected(lash_client_t *client)
 {
-	return (client) ? client->server_connected : 0;
+	return (client) ? (client->flags & LashClientIsConnected) : 0;
 }
 
 /* EOF */

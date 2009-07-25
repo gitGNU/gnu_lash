@@ -50,14 +50,13 @@ lashd_dbus_connect(method_call_t *call)
 {
 	DBusError err;
 	dbus_int32_t pid;
-	const char *sender, *class, *id_str, *wd, *client_name, *project_name, *data_path;
-	dbus_int32_t flags;
+	const char *sender, *class, *wd;
+	dbus_uint32_t flags;
 	int argc;
 	char **argv;
 	struct lash_client *client;
 
-	sender = dbus_message_get_sender(call->message);
-	if (!sender) {
+	if (!(sender = dbus_message_get_sender(call->message))) {
 		lash_error("Sender is NULL");
 		return;
 	}
@@ -69,7 +68,7 @@ lashd_dbus_connect(method_call_t *call)
 	if (!dbus_message_get_args(call->message, &err,
 	                           DBUS_TYPE_INT32, &pid,
 	                           DBUS_TYPE_STRING, &class,
-	                           DBUS_TYPE_INT32, &flags,
+	                           DBUS_TYPE_UINT32, &flags,
 	                           DBUS_TYPE_STRING, &wd,
 	                           DBUS_TYPE_ARRAY, DBUS_TYPE_STRING, &argv, &argc,
 	                           DBUS_TYPE_INVALID)) {
@@ -85,16 +84,41 @@ lashd_dbus_connect(method_call_t *call)
 		lash_debug("arg: %s", *ptr);
 #endif
 
-	lash_debug("Connected client PID is %u", pid);
+	client = server_add_inactive_client(sender, (pid_t) pid, class, flags,
+	                                    wd, argc, argv);
+	method_return_new_single(call, DBUS_TYPE_UINT32, &client->flags);
 
-	client = server_add_client(sender, (pid_t) pid, class,
-	                           (int) flags, wd, argc, argv);
+	lash_debug("Connected client PID is %u", pid);
+}
+
+static void
+lashd_dbus_activate(method_call_t *call)
+{
+	const char *sender, *id_str, *wd, *client_name, *project_name, *data_path;
+	struct lash_client *client;
+
+	if (!(sender = dbus_message_get_sender(call->message))) {
+		lash_error("Sender is NULL");
+		return;
+	}
+
+	lash_debug("Received activation request from %s", sender);
+
+	if (!(client = client_find_by_dbus_name(&g_server->inactive_clients, sender))) {
+		lash_dbus_error(call, LASH_DBUS_ERROR_UNKNOWN_CLIENT,
+		                "Cannot find %s in inactive clients list",
+		                sender);
+		return;
+	}
+
+	/* Unlink client from inactive clients list and activate it */
+	list_del(&client->siblings);
+	server_activate_client(client);
 
 	id_str = (const char *) client->id_str;
 	client_name = client->name ? client->name : "";
 	project_name = client->project ? client->project->name : "";
 	data_path = client->data_path ? client->data_path : "";
-	flags = client->flags;
 	wd = client->working_dir ? client->working_dir : "";
 
 	method_return_new_valist(call,
@@ -102,25 +126,71 @@ lashd_dbus_connect(method_call_t *call)
 	                         DBUS_TYPE_STRING, &client_name,
 	                         DBUS_TYPE_STRING, &project_name,
 	                         DBUS_TYPE_STRING, &data_path,
-	                         DBUS_TYPE_INT32, &flags,
 	                         DBUS_TYPE_STRING, &wd,
 	                         DBUS_TYPE_INVALID);
 }
 
-static bool
-get_message_sender(method_call_t  *call,
-                   const char    **sender,
-                   struct lash_client      **client)
+static void
+lashd_dbus_disconnect(method_call_t *call)
 {
-	*sender = dbus_message_get_sender(call->message);
-	if (!*sender) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-		                "Sender is NULL");
+	const char *sender;
+	struct lash_client *client;
+
+	if (!(sender = dbus_message_get_sender(call->message))) {
+		lash_error("Sender is NULL");
+		return;
+	}
+
+	lash_debug("Received disconnection request from %s", sender);
+
+	if (!(client = server_find_client_by_dbus_name(sender))
+	    && !(client = client_find_by_dbus_name(&g_server->inactive_clients, sender))) {
+		lash_dbus_error(call, LASH_DBUS_ERROR_UNKNOWN_CLIENT,
+		                "Cannot find disconnected client %s", sender);
+		return;
+	}
+
+	client_disconnected(client);
+}
+
+static inline const char *
+get_sender_dbus_name(method_call_t *call)
+{
+	const char *sender = dbus_message_get_sender(call->message);
+	if (!sender)
+		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC, "Sender is NULL");
+	return sender;
+}
+
+static bool
+get_message_sender(method_call_t       *call,
+                   const char         **sender,
+                   struct lash_client **client)
+{
+	if (!(*sender = get_sender_dbus_name(call)))
+		return false;
+
+	if (!(*client = server_find_client_by_dbus_name(*sender))
+	    && !(*client = client_find_by_dbus_name(&g_server->inactive_clients,
+	                                            *sender))) {
+		lash_dbus_error(call, LASH_DBUS_ERROR_UNKNOWN_CLIENT,
+		                "Sender %s is not a LASH client",
+		                *sender);
 		return false;
 	}
 
-	*client = server_find_client_by_dbus_name(*sender);
-	if (!*client) {
+	return true;
+}
+
+static bool
+get_message_sender_only_active(method_call_t       *call,
+                               const char         **sender,
+                               struct lash_client **client)
+{
+	if (!(*sender = get_sender_dbus_name(call)))
+		return false;
+
+	if (!(*client = server_find_client_by_dbus_name(*sender))) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_UNKNOWN_CLIENT,
 		                "Sender %s is not a LASH client",
 		                *sender);
@@ -368,7 +438,7 @@ lashd_dbus_progress(method_call_t *call)
 	uint8_t percentage;
 	DBusMessageIter iter;
 
-	if (!get_message_sender(call, &sender, &client))
+	if (!get_message_sender_only_active(call, &sender, &client))
 		return;
 
 	lash_debug("Received Progress report from client '%s'",
@@ -397,7 +467,7 @@ lashd_dbus_commit_path_change(method_call_t *call)
 	const char *sender;
 	struct lash_client *client;
 
-	if (!get_message_sender(call, &sender, &client))
+	if (!get_message_sender_only_active(call, &sender, &client))
 		return;
 
 	// Here check that there really is a pending path change
@@ -446,20 +516,20 @@ get_and_set_config(store_t         *store,
 	}
 }
 
-/* The CommitDataSet method is used by the client to deliver its data set
+/* The CommitData method is used by the client to deliver its data set
    to the server. The client will never call this method unless requested
    to do so by LASH. */
 static void
-lashd_dbus_commit_data_set(method_call_t *call)
+lashd_dbus_commit_data(method_call_t *call)
 {
-	lash_debug("CommitDataSet");
+	lash_debug("CommitData");
 
 	const char *sender;
 	struct lash_client *client;
 	DBusMessageIter iter, array_iter;
 	bool was_successful = true;
 
-	if (!get_message_sender(call, &sender, &client))
+	if (!get_message_sender_only_active(call, &sender, &client))
 		return;
 
 	lash_debug("Received data set from client '%s'",
@@ -513,15 +583,21 @@ METHOD_ARGS_END
 METHOD_ARGS_BEGIN(Connect)
   METHOD_ARG_DESCRIBE("pid", "i", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("class", "s", DIRECTION_IN)
-  METHOD_ARG_DESCRIBE("flags", "i", DIRECTION_IN)
+  METHOD_ARG_DESCRIBE("flags", "u", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("working_dir", "s", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("args", "as", DIRECTION_IN)
+  METHOD_ARG_DESCRIBE("final_flags", "u", DIRECTION_OUT)
+METHOD_ARGS_END
+
+METHOD_ARGS_BEGIN(Activate)
   METHOD_ARG_DESCRIBE("uuid", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("client_name", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("project_name", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("data_path", "s", DIRECTION_OUT)
-  METHOD_ARG_DESCRIBE("final_flags", "i", DIRECTION_OUT)
-  METHOD_ARG_DESCRIBE("final_working_dir", "s", DIRECTION_OUT)
+  METHOD_ARG_DESCRIBE("working_dir", "s", DIRECTION_OUT)
+METHOD_ARGS_END
+
+METHOD_ARGS_BEGIN(Disconnect)
 METHOD_ARGS_END
 
 METHOD_ARGS_BEGIN(JackName)
@@ -555,7 +631,7 @@ METHOD_ARGS_BEGIN(Progress)
   METHOD_ARG_DESCRIBE("percentage", "y", DIRECTION_IN)
 METHOD_ARGS_END
 
-METHOD_ARGS_BEGIN(CommitDataSet)
+METHOD_ARGS_BEGIN(CommitData)
   METHOD_ARG_DESCRIBE("task_id", "t", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("configs", "a{sv}", DIRECTION_IN)
 METHOD_ARGS_END
@@ -566,13 +642,15 @@ METHOD_ARGS_END
 METHODS_BEGIN
   METHOD_DESCRIBE(Ping, lashd_dbus_ping)
   METHOD_DESCRIBE(Connect, lashd_dbus_connect)
+  METHOD_DESCRIBE(Activate, lashd_dbus_activate)
+  METHOD_DESCRIBE(Disconnect, lashd_dbus_disconnect)
   METHOD_DESCRIBE(JackName, lashd_dbus_jack_name)
   METHOD_DESCRIBE(AlsaId, lashd_dbus_alsa_id)
   METHOD_DESCRIBE(GetName, lashd_dbus_get_name)
   METHOD_DESCRIBE(GetJackName, lashd_dbus_get_jack_name)
   METHOD_DESCRIBE(GetAlsaId, lashd_dbus_get_alsa_id)
   METHOD_DESCRIBE(Progress, lashd_dbus_progress)
-  METHOD_DESCRIBE(CommitDataSet, lashd_dbus_commit_data_set)
+  METHOD_DESCRIBE(CommitData, lashd_dbus_commit_data)
   METHOD_DESCRIBE(CommitPathChange, lashd_dbus_commit_path_change)
 METHODS_END
 
@@ -581,11 +659,6 @@ METHODS_END
  */
 
 SIGNAL_ARGS_BEGIN(Save)
-  SIGNAL_ARG_DESCRIBE("project_name", "s")
-  SIGNAL_ARG_DESCRIBE("task_id", "t")
-SIGNAL_ARGS_END
-
-SIGNAL_ARGS_BEGIN(Load)
   SIGNAL_ARG_DESCRIBE("project_name", "s")
   SIGNAL_ARG_DESCRIBE("task_id", "t")
 SIGNAL_ARGS_END

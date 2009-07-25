@@ -186,10 +186,8 @@ client_task_completed(struct lash_client *client,
 		goto end;
 	}
 
-	//lash_info("%s:%s task completed %s", project->name, client->name, was_succesful ? "successfully" : "with fail");
-
 	switch (client->task_type) {
-	case LASH_Save_Data_Set:
+	case LASH_EVENT_SAVE:
 		if (was_succesful && !store_write(client->store)) {
 			lash_error("Client '%s' could not write data "
 			           "to disk (task %llu)",
@@ -197,15 +195,12 @@ client_task_completed(struct lash_client *client,
 			           client->pending_task);
 		}
 		break;
-	case LASH_Save_File:
-		break;
-	case LASH_Restore_File:
-	case LASH_Restore_Data_Set:
+	case LASH_EVENT_LOAD:
 		if (was_succesful)
 			project_satisfy_client_dependency(project, client);
 		break;
 	default:
-		lash_error("Unknown task type %d", client->task_type);
+		lash_error("Unknown task type %u", client->task_type);
 		goto end;
 	}
 
@@ -385,21 +380,11 @@ client_resume_project(struct lash_client *client)
 		lash_strset(&client->data_path, project_get_client_dir(client->project,
 		                                                       client));
 
-	/* Create the data path if necessary */
-	if (CLIENT_CONFIG_FILE(client) || CLIENT_CONFIG_DATA_SET(client))
-		lash_create_dir(client->data_path);
-
-	/* Unlink client from project's lost_clients list */
-	list_del(&client->siblings);
+	/* Create the data path */
+	lash_create_dir(client->data_path);
 
 	/* Tell the client to load its state */
-	if (CLIENT_CONFIG_FILE(client))
-		project_load_file(client->project, client);
-	else if (CLIENT_CONFIG_DATA_SET(client))
-		project_load_data_set(client->project, client);
-	else
-		lash_warn("Client '%s' has no data to load even though "
-		          "it claims to have", client_get_identity(client));
+	project_load_client(client->project, client);
 
 	/* Link client to project's clients list */
 	list_add(&client->siblings, &client->project->clients);
@@ -425,6 +410,21 @@ client_find_by_name(struct list_head *client_list,
 	list_for_each(node, client_list) {
 		if ((client = list_entry(node, struct lash_client, siblings))
 		    && client->name && strcmp(client->name, client_name) == 0) {
+			return client;
+		}
+	}
+	return NULL;
+}
+
+struct lash_client *
+client_find_by_dbus_name(struct list_head *client_list,
+                         const char       *dbus_name)
+{
+	struct list_head *node;
+	struct lash_client *client;
+	list_for_each (node, client_list) {
+		if ((client = list_entry(node, struct lash_client, siblings))
+		    && client->dbus_name && strcmp(client->dbus_name, dbus_name) == 0) {
 			return client;
 		}
 	}

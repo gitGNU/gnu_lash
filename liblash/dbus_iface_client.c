@@ -32,7 +32,6 @@
 #include "lash/types.h"
 
 #include "client.h"
-#include "lash_config.h"
 
 #define client_ptr ((lash_client_t *)(((object_path_t *)call->context)->context))
 
@@ -75,12 +74,29 @@ end:
 	dbus_pending_call_unref(pending);
 }
 
+bool
+check_client_cb(lash_client_t *client,
+                method_call_t *call)
+{
+	if (client->client_cb)
+		return true;
+
+	if (call)
+		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
+		                "Client callback not registered");
+	else
+		lash_error("Client callback not registered");
+
+	return false;
+}
+
+
 static void
 lash_dbus_try_save(method_call_t *call)
 {
-	lash_debug("TrySave");
-
 	dbus_bool_t retval;
+
+	lash_debug("TrySave");
 
 	if (client_ptr->pending_task) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_UNFINISHED_TASK,
@@ -89,14 +105,12 @@ lash_dbus_try_save(method_call_t *call)
 		return;
 	}
 
-	if (!client_ptr->cb.trysave) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-		                "TrySave callback not registered");
+	if (!check_client_cb(client_ptr, call))
 		return;
-	}
 
 	/* Check whether the client says it's OK to save */
-	if (client_ptr->cb.trysave(client_ptr->ctx.trysave)) {
+	if ((retval = client_ptr->client_cb(LASH_EVENT_TRYSAVE,
+	                                    client_ptr->client_data))) {
 		/* Client says it can save  */
 		method_call_new_void(client_ptr->dbus_service,
 		                     NULL,
@@ -106,11 +120,6 @@ lash_dbus_try_save(method_call_t *call)
 		                     "/",
 		                     "org.nongnu.LASH.Server",
 		                     "WaitForSave");
-		retval = true;
-	} else {
-		/* Client says it cannot save, server needs to
-		   know it in order to cancel the pending save */
-		retval = false;
 	}
 
 	method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
@@ -144,22 +153,48 @@ void
 lash_new_save_task(lash_client_t *client,
                    dbus_uint64_t  task_id)
 {
+	bool retval;
+
 	client->pending_task = task_id;
+
+	if (!(retval = check_client_cb(client, NULL)))
+		goto report;
+
+	client->task_event = LASH_EVENT_SAVE;
 	client->task_progress = 0;
 
-	/* Check if a save callback has been registered */
-	if (client->cb.save) {
-		/* Call the save callback; its return value dictates whether 
-		   to report success or failure back to the server */
-		if (client->cb.save(client->ctx.save)) {
-			report_success_or_failure(client, true);
-		} else {
-			lash_error("Client failed to save data");
-			report_success_or_failure(client, false);
-		}
+	/* Call the client callback */
+	if (!(retval = client->client_cb(LASH_EVENT_SAVE, client->client_data)))
+		lash_error("Callback failed");
 
-		client->pending_task = 0;
+	client->task_event = LASH_EVENT_INVALID;
+
+	/* Check if the client wrote any data during the callback, in which
+	   case we need to send a CommitData message instead of a simple
+	   success/failure message. */
+	if (client->task_msg.message) {
+		if (retval) {
+			if (!(retval = dbus_message_iter_close_container(&client->task_msg_iter,
+			                                                 &client->task_msg_array_iter))) {
+				lash_error("Failed to close array container");
+				goto unref;
+			}
+
+			if ((retval = method_send(&client->task_msg, false)))
+				goto end;
+
+			lash_error("Failed to send CommitData method call");
+		} else {
+		unref:
+			dbus_message_unref(client->task_msg.message);
+			client->task_msg.message = NULL;
+		}
 	}
+
+report:
+	report_success_or_failure(client, retval);
+end:
+	client->pending_task = 0;
 }
 
 static bool
@@ -197,9 +232,9 @@ get_task_id(method_call_t   *call,
 static void
 lash_dbus_save(method_call_t *call)
 {
-	lash_debug("Save");
-
 	dbus_uint64_t task_id;
+
+	lash_debug("Save");
 
 	if (!get_task_id(call, &task_id, NULL))
 		return;
@@ -214,163 +249,14 @@ lash_dbus_save(method_call_t *call)
 static void
 lash_dbus_load(method_call_t *call)
 {
-	lash_debug("Load");
-
-	DBusMessageIter iter;
-	dbus_uint64_t task_id;
-	const char *data_path;
-
-	if (!get_task_id(call, &task_id, &iter))
-		return;
-
-
-	// TODO: Don't send the data path, the client should know it at all times
-	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_INVALID_ARGS,
-		                "Invalid arguments to method \"%s\": "
-		                "Cannot find data path in message",
-		                call->method_name);
-		return;
-	}
-	dbus_message_iter_get_basic(&iter, &data_path);
-
-	lash_strset(&client_ptr->data_path, data_path);
-
-	client_ptr->pending_task = task_id;
-	client_ptr->task_progress = 0;
-
-	/* Check if a load callback has been registered */
-	if (client_ptr->cb.load) {
-		/* Send a void return here to avoid possible timeout */
-		call->reply = dbus_message_new_method_return(call->message);
-		method_return_send(call);
-
-		/* Call the load callback; its return value dictates whether
-		   to report success or failure back to the server */
-		if (client_ptr->cb.load(client_ptr->ctx.load)) {
-			report_success_or_failure(client_ptr, true);
-		} else {
-			lash_error("Client failed to load data");
-			report_success_or_failure(client_ptr, false);
-		}
-
-		client_ptr->pending_task = 0;
-	} else {
-		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-		                "Load callback not registered");
-		client_ptr->pending_task = 0;
-	}
-}
-
-void
-lash_new_save_data_set_task(lash_client_t *client,
-                            dbus_uint64_t  task_id)
-{
-	method_msg_t *new_call;
-	DBusMessageIter *iter, *array_iter;
-
-	method_msg_t _new_call;
-	DBusMessageIter _iter, _array_iter;
-	new_call = &_new_call;
-	iter = &_iter;
-	array_iter = &_array_iter;
-
-	client->pending_task = task_id;
-	client->task_progress = 0;
-
-	if (!method_call_init(new_call, client->dbus_service,
-	                      NULL,
-	                      method_default_handler,
-	                      "org.nongnu.LASH",
-	                      "/",
-	                      "org.nongnu.LASH.Server",
-	                      "CommitDataSet")) {
-		lash_error("Failed to initialise CommitDataSet method call");
-		goto fail;
-	}
-
-	dbus_message_iter_init_append(new_call->message, iter);
-
-	if (!dbus_message_iter_append_basic(iter, DBUS_TYPE_UINT64, &task_id)) {
-		lash_error("Failed to write task ID");
-		goto fail_unref;
-	}
-
-	if (!dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "{sv}", array_iter)) {
-		lash_error("Failed to open config array container");
-		goto fail_unref;
-	}
-
-	if (client->cb.save_data_set) {
-		struct _lash_config_handle cfg;
-
-		/* Call the save callback */
-		cfg.iter = array_iter;
-		cfg.is_read = false;
-		if (!client->cb.save_data_set(&cfg,
-		                              client->ctx.save_data_set)) {
-			lash_error("Callback failed to save data set");
-			dbus_message_iter_close_container(iter, array_iter);
-			goto fail_unref;
-		}
-
-		if (!dbus_message_iter_close_container(iter, array_iter)) {
-			lash_error("Failed to close array container");
-			goto fail_unref;
-		}
-
-		/* Succesfully sending the data set implies success */
-		if (!method_send(new_call, false)) {
-			lash_error("Failed to send CommitDataSet method call");
-			goto fail;
-		}
-
-		lash_debug("Sent data set message");
-
-		client->pending_task = 0;
-	} else {
-		lash_error("SaveDataSet callback not registered");
-		goto fail;
-	}
-
-	return;
-
-fail_unref:
-	dbus_message_unref(new_call->message);
-fail:
-	report_success_or_failure(client, false);
-	client->pending_task = 0;
-}
-
-#if 0
-static void
-lash_dbus_save_data_set(method_call_t *call)
-{
-	lash_debug("SaveDataSet");
-
-	dbus_uint64_t task_id;
-
-	if (!get_task_id(call, &task_id, NULL))
-		return;
-
-	/* Send a void return here to avoid possible timeout */
-	call->reply = dbus_message_new_method_return(call->message);
-	method_return_send(call);
-
-	lash_new_save_data_set_task(client_ptr, task_id);
-}
-#endif
-
-static void
-lash_dbus_load_data_set(method_call_t *call)
-{
-	lash_debug("LoadDataSet");
-
 	DBusMessageIter iter, array_iter;
 	dbus_uint64_t task_id;
-	struct _lash_config_handle cfg;
+	bool retval;
 
-	if (!get_task_id(call, &task_id, &iter))
+	lash_debug("Load");
+
+	if (!check_client_cb(client_ptr, call)
+	    || !get_task_id(call, &task_id, &iter))
 		return;
 
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY) {
@@ -381,35 +267,25 @@ lash_dbus_load_data_set(method_call_t *call)
 		return;
 	}
 
-	dbus_message_iter_recurse(&iter, &array_iter);
+	/* Send a void return here to avoid possible timeout */
+	call->reply = dbus_message_new_method_return(call->message);
+	method_return_send(call);
 
-	cfg.iter = &array_iter;
-	cfg.is_read = true;
+	dbus_message_iter_recurse(&iter, &client_ptr->task_msg_array_iter);
 
 	client_ptr->pending_task = task_id;
+	client_ptr->task_event = LASH_EVENT_LOAD;
 	client_ptr->task_progress = 0;
 
-	if (client_ptr->cb.load_data_set) {
-		/* Send a void return here to avoid possible timeout */
-		call->reply = dbus_message_new_method_return(call->message);
-		method_return_send(call);
+	/* Call the client callback; its return value dictates whether
+	   to report success or failure back to the server */
+	if (!(retval = client_ptr->client_cb(LASH_EVENT_LOAD, client_ptr->client_data)))
+		lash_error("Client failed to load data");
 
-		/* Call the load callback; its return value dictates whether
-		   to report success or failure back to the server */
-		if (client_ptr->cb.load_data_set(&cfg,
-		                                 client_ptr->ctx.load_data_set)) {
-			report_success_or_failure(client_ptr, true);
-		} else {
-			lash_error("Callback failed to load data set");
-			report_success_or_failure(client_ptr, false);
-		}
+	report_success_or_failure(client_ptr, retval);
 
-		client_ptr->pending_task = 0;
-	} else {
-		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-		                "LoadDataSet callback not registered");
-		client_ptr->pending_task = 0;
-	}
+	client_ptr->pending_task = 0;
+	client_ptr->task_event = LASH_EVENT_INVALID;
 }
 
 void
@@ -418,12 +294,8 @@ lash_new_quit_task(lash_client_t *client)
 	if (client->pending_task)
 		lash_error("Warning: Task %llu is unfinished, quitting anyway", client->pending_task);
 
-	/* Check if a quit callback has been registered */
-	if (client->cb.quit) {
-		client->cb.quit(client->ctx.quit);
-	} else {
-		lash_error("Quit callback not registered");
-	}
+	if (check_client_cb(client, NULL))
+		client->client_cb(LASH_EVENT_QUIT, client->client_data);
 }
 
 static void
@@ -431,7 +303,7 @@ lash_dbus_quit(method_call_t *call)
 {
 	/* Send a return right away to prevent LASH from getting an error
 	   from the bus daemon if the clients decides to exit() in its
-	   quit callback. */
+	   callback. */
 	call->reply = dbus_message_new_method_return(call->message);
 	method_return_send(call);
 
@@ -483,9 +355,9 @@ end:
 static void
 lash_dbus_try_path_change(method_call_t *call)
 {
-	lash_debug("TryPathChange");
-
 	dbus_bool_t retval;
+
+	lash_debug("TryPathChange");
 
 	if (client_ptr->pending_task) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_UNFINISHED_TASK,
@@ -494,14 +366,12 @@ lash_dbus_try_path_change(method_call_t *call)
 		return;
 	}
 
-	if (!client_ptr->cb.path) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
-		                "Path change callback not registered");
+	if (!check_client_cb(client_ptr, call))
 		return;
-	}
 
 	/* Check whether the client says it's OK to change the path */
-	if (client_ptr->cb.path(client_ptr->ctx.path)) {
+	if ((retval = client_ptr->client_cb(LASH_EVENT_TRY_PATH_CHANGE,
+	                                    client_ptr->client_data))) {
 		/* Client says path can be changed, send a commit message */
 		method_call_new_void(client_ptr->dbus_service,
 		                     client_ptr,
@@ -511,11 +381,6 @@ lash_dbus_try_path_change(method_call_t *call)
 		                     "/",
 		                     "org.nongnu.LASH.Server",
 		                     "CommitPathChange");
-		retval = true;
-	} else {
-		/* Client says path cannot be changed, server needs to
-		   know it in order to cancel the pending path change */
-		retval = false;
 	}
 
 	method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
@@ -524,8 +389,8 @@ lash_dbus_try_path_change(method_call_t *call)
 static void
 lash_dbus_client_name_changed(method_call_t *call)
 {
-	const char *new_name;
 	DBusError err;
+	const char *new_name;
 
 	dbus_error_init(&err);
 
@@ -546,9 +411,8 @@ lash_dbus_client_name_changed(method_call_t *call)
 
 	lash_strset(&client_ptr->name, new_name);
 
-	/* Call ClientNameChanged callback */
-	if (client_ptr->cb.name)
-		client_ptr->cb.name(client_ptr->ctx.name);
+	if (check_client_cb(client_ptr, call))
+		client_ptr->client_cb(LASH_EVENT_CLIENT_NAME_CHANGED, client_ptr->client_data);
 }
 
 #undef client_ptr
@@ -562,11 +426,6 @@ METHOD_ARGS_BEGIN(Save)
 METHOD_ARGS_END
 
 METHOD_ARGS_BEGIN(Load)
-  METHOD_ARG_DESCRIBE("task_id", "t", DIRECTION_IN)
-  METHOD_ARG_DESCRIBE("data_path", "s", DIRECTION_IN)
-METHOD_ARGS_END
-
-METHOD_ARGS_BEGIN(LoadDataSet)
   METHOD_ARG_DESCRIBE("task_id", "t", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("configs", "a{sv}", DIRECTION_IN)
 METHOD_ARGS_END
@@ -589,7 +448,6 @@ METHOD_ARGS_END
 METHODS_BEGIN
   METHOD_DESCRIBE(Save, lash_dbus_save)
   METHOD_DESCRIBE(Load, lash_dbus_load)
-  METHOD_DESCRIBE(LoadDataSet, lash_dbus_load_data_set)
   METHOD_DESCRIBE(Quit, lash_dbus_quit)
   METHOD_DESCRIBE(TrySave, lash_dbus_try_save)
   METHOD_DESCRIBE(TryPathChange, lash_dbus_try_path_change)

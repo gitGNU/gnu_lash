@@ -21,6 +21,8 @@
 #ifndef __LIBLASH_DBUS_IFACE_CLIENT_H__
 #define __LIBLASH_DBUS_IFACE_CLIENT_H__
 
+#include <stdbool.h>
+
 #include "dbus/interface.h"
 
 #include "lash/types.h"
@@ -34,10 +36,10 @@ lash_new_save_task(lash_client_t *client,
                    dbus_uint64_t  task_id);
 
 void
-lash_new_save_data_set_task(lash_client_t *client,
-                            dbus_uint64_t  task_id);
-
-void
 lash_new_quit_task(lash_client_t *client);
+
+bool
+check_client_cb(lash_client_t *client,
+                method_call_t *call);
 
 #endif /* __LIBLASH_DBUS_IFACE_CLIENT_H__ */

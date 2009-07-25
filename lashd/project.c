@@ -188,10 +188,7 @@ project_new_client(project_t *project,
 
 	lash_debug("New client now has id %s", client->id_str);
 
-	if (CLIENT_CONFIG_DATA_SET(client))
-		client_store_open(client,
-		                  project_get_client_config_dir(project,
-		                                                client));
+	client_store_open(client, project_get_client_config_dir(project, client));
 
 	client->project = project;
 	list_add(&client->siblings, &project->clients);
@@ -235,51 +232,16 @@ project_satisfy_client_dependency(project_t *project,
 	}
 }
 
+/* Send a Load method call to the client */
 void
-project_load_file(project_t *project,
-                  struct lash_client  *client)
+project_load_client(project_t *project,
+                    struct lash_client  *client)
 {
-	lash_info("Requesting client '%s' to load data from disk",
-	           client_get_identity(client));
-
-	client->pending_task = (++g_server->task_iter);
-	client->task_type = LASH_Restore_File;
-	client->task_progress = 0;
-
-	method_call_new_valist(g_server->dbus_service, NULL,
-	                       method_default_handler, false,
-	                       client->dbus_name,
-	                       "/org/nongnu/LASH/Client",
-	                       "org.nongnu.LASH.Client",
-	                       "Load",
-	                       DBUS_TYPE_UINT64, &client->pending_task,
-	                       DBUS_TYPE_STRING, &client->data_path,
-	                       DBUS_TYPE_INVALID);
-}
-
-/* Send a LoadDataSet method call to the client */
-void
-project_load_data_set(project_t *project,
-                      struct lash_client  *client)
-{
-	if (!client_store_open(client, project_get_client_config_dir(project,
-	                                                             client))) {
-		lash_error("Could not open client's store; "
-		           "not sending data set");
-		return;
-	}
-
-	lash_info("Sending client '%s' its data set",
-	           client_get_identity(client));
-
-	if (list_empty(&client->store->keys)) {
-		lash_debug("No data found in store");
-		return;
-	}
-
 	method_msg_t new_call;
 	DBusMessageIter iter, array_iter;
 	dbus_uint64_t task_id;
+
+	lash_info("Requesting client '%s' to load", client_get_identity(client));
 
 	if (!method_call_init(&new_call, g_server->dbus_service,
 	                      NULL,
@@ -287,8 +249,8 @@ project_load_data_set(project_t *project,
 	                      client->dbus_name,
 	                      "/org/nongnu/LASH/Client",
 	                      "org.nongnu.LASH.Client",
-	                      "LoadDataSet")) {
-		lash_error("Failed to initialise LoadDataSet method call");
+	                      "Load")) {
+		lash_error("Failed to initialise Load method call");
 		return;
 	}
 
@@ -306,7 +268,9 @@ project_load_data_set(project_t *project,
 		goto fail;
 	}
 
-	if (!store_create_config_array(client->store, &array_iter)) {
+	if (client_store_open(client,
+	                      project_get_client_config_dir(project, client))
+	    && !store_create_config_array(client->store, &array_iter)) {
 		lash_error("Failed to create config array");
 		goto fail;
 	}
@@ -317,13 +281,13 @@ project_load_data_set(project_t *project,
 	}
 
 	if (!method_send(&new_call, false)) {
-		lash_error("Failed to send LoadDataSet method call");
+		lash_error("Failed to send Load method call");
 		/* method_send has unref'd the message for us */
 		return;
 	}
 
 	client->pending_task = task_id;
-	client->task_type = LASH_Restore_Data_Set;
+	client->task_type = LASH_EVENT_LOAD;
 	client->task_progress = 0;
 
 	return;
@@ -337,7 +301,7 @@ project_launch_client(project_t *project,
                       struct lash_client  *client)
 {
 	lash_debug("Launching client %s (flags 0x%08X)", client->id_str, client->flags);
-	loader_execute(client, client->flags & LASH_Terminal);
+	loader_execute(client, client->flags & LashClientNeedsTerminal);
 }
 
 struct lash_client *
@@ -497,21 +461,14 @@ project_save_clients(project_t *project)
 
 	list_for_each (node, &project->clients) {
 		client = list_entry(node, struct lash_client, siblings);
-
-		if (CLIENT_HAS_INTERNAL_STATE(client))
-		{
-			client->pending_task = g_server->task_iter;
-			client->task_type = (CLIENT_CONFIG_FILE(client)) ? LASH_Save_File : LASH_Save_Data_Set;
-			client->task_progress = 0;
-			++project->client_tasks_total;
-		}
+		client->pending_task = g_server->task_iter;
+		client->task_type = LASH_EVENT_SAVE;
+		client->task_progress = 0;
+		++project->client_tasks_total;
 	}
 
-	project->client_tasks_pending = project->client_tasks_total;
-	if (project->client_tasks_total == 0)
-	{
+	if ((project->client_tasks_pending = project->client_tasks_total) == 0)
 		project->task_type = 0;
-	}
 }
 
 static void
@@ -837,7 +794,7 @@ void
 project_save(project_t *project)
 {
 	if (project->task_type) {
-		lash_error("Another task (type %d) is in progress, cannot save right now", project->task_type);
+		lash_error("Another task (type %u) is in progress, cannot save right now", project->task_type);
 		lash_error("%" PRIu32 " pending client tasks.", project->client_tasks_pending);
 		return;
 	}
@@ -1064,26 +1021,25 @@ void
 project_lose_client(project_t *project,
                     struct lash_client  *client)
 {
+	const char *dir;
 	LIST_HEAD(patches);
 
 	lash_info("Losing client '%s'", client_get_identity(client));
 
-	if (CLIENT_CONFIG_DATA_SET(client) && client->store) {
+	if (client->store) {
 		if (!list_empty(&client->store->keys))
 			store_write(client->store);
 		else if (lash_dir_exists(client->store->dir))
 			lash_remove_dir(client->store->dir);
 	}
 
-	if (CLIENT_CONFIG_DATA_SET(client) || CLIENT_CONFIG_FILE(client)) {
-		const char *dir = (const char *) client->data_path;
-		if (lash_dir_exists(dir) && lash_dir_empty(dir))
-			lash_remove_dir(dir);
+	dir = (const char *) client->data_path;
+	if (lash_dir_exists(dir) && lash_dir_empty(dir))
+		lash_remove_dir(dir);
 
-		dir = lash_get_fqn(project->directory, PROJECT_ID_DIR);
-		if (lash_dir_exists(dir) && lash_dir_empty(dir))
-			lash_remove_dir(dir);
-	}
+	dir = lash_get_fqn(project->directory, PROJECT_ID_DIR);
+	if (lash_dir_exists(dir) && lash_dir_empty(dir))
+		lash_remove_dir(dir);
 
 	if (client->jack_client_name) {
 #ifdef HAVE_JACK_DBUS
@@ -1271,10 +1227,10 @@ project_client_task_completed(project_t *project,
 
 		/* Send ProjectSaved or ProjectLoaded signal, or return if the task was neither */
 		switch (client->task_type) {
-		case LASH_Save_Data_Set: case LASH_Save_File:
+		case LASH_EVENT_SAVE:
 			project_clients_save_complete(project);
 			break;
-		case LASH_Restore_File: case LASH_Restore_Data_Set:
+		case LASH_EVENT_LOAD:
 			project_loaded(project);
 			break;
 		default:

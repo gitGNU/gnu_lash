@@ -28,4 +28,11 @@
 #include <lash/config.h>
 #include <lash/client_interface.h>
 
+/** @defgroup LASH LASH public API
+ * @brief The public API of the LASH library
+ */
+
+/** @mainpage
+ * 
+ */
 #endif /* __LASH_H__ */

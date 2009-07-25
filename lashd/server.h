@@ -24,6 +24,7 @@
 #include "../config.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <dbus/dbus.h>
 #include <uuid/uuid.h>
@@ -53,6 +54,7 @@ struct _server
 #endif
 
 	char                 *projects_dir;
+	struct list_head      inactive_clients;
 	struct list_head      loaded_projects;
 	struct list_head      all_projects;
 	struct list_head      appdb;
@@ -74,13 +76,16 @@ project_t *
 server_find_project_by_name(const char *project_name);
 
 struct lash_client *
-server_add_client(const char  *dbus_name,
-                  pid_t        pid,
-                  const char  *class,
-                  int          flags,
-                  const char  *working_dir,
-                  int          argc,
-                  char       **argv);
+server_add_inactive_client(const char  *dbus_name,
+                           pid_t        pid,
+                           const char  *class,
+                           uint32_t     flags,
+                           const char  *working_dir,
+                           int          argc,
+                           char       **argv);
+
+void
+server_activate_client(struct lash_client *client);
 
 struct lash_client *
 server_find_client_by_dbus_name(const char *dbus_name);

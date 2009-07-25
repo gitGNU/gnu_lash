@@ -31,8 +31,6 @@
 
 #include "common/klist.h"
 
-#include "lash/types.h"
-
 #include "types.h"
 
 struct lash_client
@@ -42,7 +40,7 @@ struct lash_client
 	uuid_t                  id;
 	char                    id_str[37];
 	pid_t                   pid;
-	enum LASH_Client_Flag   flags;
+	uint32_t                flags;
 	char                   *class;
 	char                   *working_dir;
 	char                   *data_path;
@@ -54,7 +52,7 @@ struct lash_client
 	store_t                *store;
 
 	dbus_uint64_t           pending_task;
-	enum LASH_Event_Type    task_type;
+	uint8_t                 task_type;
 	uint8_t                 task_progress;
 
 	char                   *jack_client_name;
@@ -67,13 +65,6 @@ struct lash_client
 
 	project_t              *project;
 };
-
-#define CLIENT_CONFIG_DATA_SET(x)    (((x)->flags) & LASH_Config_Data_Set)
-#define CLIENT_CONFIG_FILE(x)        (((x)->flags) & LASH_Config_File)
-#define CLIENT_HAS_INTERNAL_STATE(x) (((x)->flags) & (LASH_Config_Data_Set | LASH_Config_File))
-#define CLIENT_SERVER_INTERFACE(x)   (((x)->flags) & LASH_Server_Interface)
-#define CLIENT_NO_AUTORESUME(x)      (((x)->flags) & LASH_No_Autoresume)
-#define CLIENT_TERMINAL(x)           (((x)->flags) & LASH_Terminal)
 
 struct lash_client *
 client_new(void);
@@ -126,5 +117,14 @@ client_resume_project(struct lash_client *client);
 struct lash_client *
 client_find_by_name(struct list_head *client_list,
                     const char       *client_name);
+
+/** Find the client whose D-Bus name is @a dbus_name in list @a client_list.
+ * @param client_list List of @ref struct lash_client type objects.
+ * @param dbus_name D-Bus name of client to find.
+ * @return Pointer to client or NULL if not found.
+ */
+struct lash_client *
+client_find_by_dbus_name(struct list_head *client_list,
+                         const char       *dbus_name);
 
 #endif /* __LASHD_CLIENT_H__ */

@@ -43,6 +43,7 @@
 #include "common/safety.h"
 #include "common/debug.h"
 #include "common/klist.h"
+#include "common/types.h"
 #include "jack_mgr_client.h"
 
 #ifdef HAVE_JACK_DBUS
@@ -61,6 +62,7 @@ server_start(const char *default_dir)
 {
 	g_server = lash_calloc(1, sizeof(server_t));
 
+	INIT_LIST_HEAD(&g_server->inactive_clients);
 	INIT_LIST_HEAD(&g_server->loaded_projects);
 	INIT_LIST_HEAD(&g_server->all_projects);
 
@@ -215,23 +217,6 @@ server_find_project_by_name(const char *project_name)
 }
 
 static __inline__ struct lash_client *
-find_client_in_list_by_dbus_name(struct list_head *client_list,
-                                 const char       *dbus_name)
-{
-	struct list_head *node;
-	struct lash_client *client;
-
-	list_for_each (node, client_list) {
-		client = list_entry(node, struct lash_client, siblings);
-
-		if (strcmp(client->dbus_name, dbus_name) == 0)
-			return client;
-	}
-
-	return NULL;
-}
-
-static __inline__ struct lash_client *
 find_client_in_list_by_pid(struct list_head *client_list,
                            pid_t             pid)
 {
@@ -257,9 +242,7 @@ server_find_client_by_dbus_name(const char *dbus_name)
 
 	list_for_each (node, &g_server->loaded_projects) {
 		project = list_entry(node, project_t, siblings_loaded);
-
-		client = find_client_in_list_by_dbus_name(&project->clients,
-		                                          dbus_name);
+		client = client_find_by_dbus_name(&project->clients, dbus_name);
 		if (client)
 			return client;
 	}
@@ -469,31 +452,50 @@ server_save_all_projects(void)
 }
 
 struct lash_client *
-server_add_client(const char  *dbus_name,
-                  pid_t        pid,
-                  const char  *class,
-                  int          flags,
-                  const char  *working_dir,
-                  int          argc,
-                  char       **argv)
+server_add_inactive_client(const char  *dbus_name,
+                           pid_t        pid,
+                           const char  *class,
+                           uint32_t     flags,
+                           const char  *working_dir,
+                           int          argc,
+                           char       **argv)
 {
 	struct lash_client *client;
 
-	/* See if we launched this client */
+	/* Check whether the contacting client was launched by lashd */
 	if (pid && (client = server_find_lost_client_by_pid(pid))) {
-		lash_strset(&client->dbus_name, dbus_name);
-		client->flags |= LASH_Restored;
-		client_resume_project(client);
-	/* Otherwise add a new client */
+		/* Unlink client from project's lost_clients list */
+		list_del(&client->siblings);
+		client->flags |= LashClientIsRestored;
+
 	} else {
+		/* Don't let any server-side (temporary) flags sneak into
+		   permanent storage. */
+		flags &= LashClientIsController|LashClientNeedsTerminal;
+
+		/* Create new client */
 		client = client_new();
 		client->pid = pid;
 		lash_strset(&client->class, class);
 		client->flags = flags;
 		client->argc = argc;
 		client->argv = argv;
-		lash_strset(&client->dbus_name, dbus_name);
 		lash_strset(&client->working_dir, working_dir);
+	}
+
+	lash_strset(&client->dbus_name, dbus_name);
+	list_add_tail(&client->siblings, &g_server->inactive_clients);
+
+	return client;
+}
+
+void
+server_activate_client(struct lash_client *client)
+{
+	if (client->flags & LashClientIsRestored) {
+		client->flags ^= LashClientIsRestored;
+		client_resume_project(client);
+	} else {
 		project_new_client(server_get_newborn_project(), client);
 	}
 
@@ -501,11 +503,10 @@ server_add_client(const char  *dbus_name,
 	/* Try to find an unknown JACK client whose PID matches the newly
 	   added LASH client's, if succesful bind them together */
 	jack_mgr_client_t *jack_client;
-	if ((jack_client = jack_mgr_client_find_by_pid(&(g_server->jackdbus_mgr->unknown_clients), pid)))
+	if ((jack_client = jack_mgr_client_find_by_pid(&(g_server->jackdbus_mgr->unknown_clients), client->pid)))
 		lashd_jackdbus_mgr_bind_client(jack_client, client);
 #endif
 
-	return client;
 }
 
 static bool

@@ -23,6 +23,7 @@
 #define __LIBLASH_CLIENT_H__
 
 #include <stdint.h>
+#include <pthread.h>
 #include <uuid/uuid.h>
 #include <dbus/dbus.h>
 
@@ -35,49 +36,31 @@
 
 struct _lash_client
 {
-	char       *class;
-	uuid_t      id;
-	char       *name; // TODO: Get name from server
-	char       *project_name;
-	uint8_t     is_controller;
-	int         argc;
-	char      **argv;
-	char       *working_dir;
-	int         flags;
-	service_t  *dbus_service;
-	bool        quit; // TODO: What to do with this?
-	uint64_t    pending_task;
-	uint8_t     task_progress;
-	short       server_connected;
-	char       *data_path;
+	char             *class;
+	uuid_t            id;
+	char             *name; // TODO: Get name from server
+	char             *project_name;
+	int               argc;
+	char            **argv;
+	char             *working_dir;
+	uint32_t          flags;
 
-	struct
-	{
-		LashEventCallback    trysave;
-		LashEventCallback    save;
-		LashEventCallback    load;
-		LashEventCallback    quit;
-		LashEventCallback    name;
-		LashEventCallback    proj;
-		LashEventCallback    path;
-		LashConfigCallback   save_data_set;
-		LashConfigCallback   load_data_set;
-		LashControlCallback  control;
-	} cb;
+	service_t        *dbus_service;
+	pthread_t         thread_id;
+	volatile bool     quit;
+	uint64_t          pending_task;
+	uint8_t           task_event;
+	method_msg_t      task_msg;
+	DBusMessageIter   task_msg_iter;
+	DBusMessageIter   task_msg_array_iter;
+	uint8_t           task_progress;
+	char             *data_path;
 
-	struct
-	{
-		void                *trysave;
-		void                *save;
-		void                *load;
-		void                *quit;
-		void                *name;
-		void                *proj;
-		void                *path;
-		void                *save_data_set;
-		void                *load_data_set;
-		void                *control;
-	} ctx;
+	LashClientCallback  client_cb;
+	void               *client_data;
+
+	LashControlCallback  control_cb;
+	void                *control_data;
 };
 
 lash_client_t *
@@ -85,5 +68,8 @@ lash_client_new(void);
 
 void
 lash_client_destroy(lash_client_t *client);
+
+bool
+lash_client_init_task_msg(lash_client_t *client);
 
 #endif /* __LIBLASH_CLIENT_H__ */
