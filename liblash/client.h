@@ -54,7 +54,6 @@ struct _lash_client
 	DBusMessageIter   task_msg_iter;
 	DBusMessageIter   task_msg_array_iter;
 	uint8_t           task_progress;
-	char             *data_path;
 
 	LashClientCallback  client_cb;
 	void               *client_data;

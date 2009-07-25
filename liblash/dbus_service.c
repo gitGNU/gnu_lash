@@ -97,7 +97,7 @@ lash_dbus_service_activate_handler(DBusPendingCall *pending,
 	lash_client_t *client = data;
 	DBusMessage *msg;
 	DBusError err;
-	const char *id_str, *client_name, *project_name, *data_path, *wd, *err_str;
+	const char *id_str, *client_name, *project_name, *wd, *err_str;
 
 	if (!(msg = dbus_pending_call_steal_reply(pending))) {
 		lash_error("Cannot get method return from pending call");
@@ -115,7 +115,6 @@ lash_dbus_service_activate_handler(DBusPendingCall *pending,
 	                           DBUS_TYPE_STRING, &id_str,
 	                           DBUS_TYPE_STRING, &client_name,
 	                           DBUS_TYPE_STRING, &project_name,
-	                           DBUS_TYPE_STRING, &data_path,
 	                           DBUS_TYPE_STRING, &wd,
 	                           DBUS_TYPE_INVALID)) {
 		lash_error("Cannot get message arguments: %s", err.message);
@@ -132,12 +131,9 @@ lash_dbus_service_activate_handler(DBusPendingCall *pending,
 		client_name = NULL;
 	if (!project_name[0])
 		project_name = NULL;
-	if (!data_path[0])
-		data_path = NULL;
 
 	lash_strset(&client->name, client_name);
 	lash_strset(&client->project_name, project_name);
-	lash_strset(&client->data_path, data_path);
 
 	/* Change working directory if the server so demands */
 	if (strcmp(wd, client->working_dir) != 0) {
@@ -149,8 +145,8 @@ lash_dbus_service_activate_handler(DBusPendingCall *pending,
 	}
 
 	lash_debug("Activated LASH client with ID %s, name '%s', "
-	           "project '%s', data path '%s', working directory '%s'",
-	           id_str, client_name, project_name, data_path, wd);
+	           "project '%s', working directory '%s'",
+	           id_str, client_name, project_name, wd);
 
 end_unref_msg:
 	dbus_message_unref(msg);

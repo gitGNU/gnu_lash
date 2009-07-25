@@ -58,7 +58,6 @@ client_destroy(struct lash_client *client)
 		lash_free(&client->jack_client_name);
 		lash_free(&client->class);
 		lash_free(&client->working_dir);
-		lash_free(&client->data_path);
 		dbus_free_string_array(client->argv);
 		if (client->store)
 			store_destroy(client->store);
@@ -339,14 +338,6 @@ client_resume_project(struct lash_client *client)
 {
 	lash_debug("Attempting to resume client of class '%s'",
 	           client->class);
-
-	/* Set default data path if necessary */
-	if (!client->data_path || !client->data_path[0])
-		lash_strset(&client->data_path, project_get_client_dir(client->project,
-		                                                       client));
-
-	/* Create the data path */
-	lash_create_dir(client->data_path);
 
 	/* Tell the client to load its state */
 	project_load_client(client->project, client);

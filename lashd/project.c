@@ -57,10 +57,6 @@
 # include "jack_mgr.h"
 #endif
 
-static const char *
-project_get_client_config_dir(project_t *project,
-                              struct lash_client  *client);
-
 project_t *
 project_new(void)
 {
@@ -170,6 +166,15 @@ project_name_client(project_t  *project,
 	lash_info("Client %s set its name to '%s'", client->id_str, client->name);
 }
 
+static const char *
+project_get_client_dir(project_t *project,
+                       struct lash_client  *client)
+{
+	get_store_and_return_fqn(lash_get_fqn(project->directory,
+	                                      PROJECT_ID_DIR),
+	                         client->id_str);
+}
+
 void
 project_new_client(project_t *project,
                    struct lash_client  *client)
@@ -177,21 +182,15 @@ project_new_client(project_t *project,
 	uuid_generate(client->id);
 	uuid_unparse(client->id, client->id_str);
 
-	/* Set the client's data path */
-	lash_strset(&client->data_path,
-	            project_get_client_dir(project, client));
-
 	lash_debug("New client now has id %s", client->id_str);
 
-	client_store_open(client, project_get_client_config_dir(project, client));
+	client_store_open(client, project_get_client_dir(project, client));
 
 	client->project = project;
 	list_add(&client->siblings, &project->clients);
 
 	lash_info("Added client %s of class '%s' to project '%s'",
 	          client->id_str, client->class, project->name);
-
-	lash_create_dir(client->data_path);
 
 	/* Give the client a unique name */
 	project_name_client(project, client);
@@ -263,8 +262,7 @@ project_load_client(project_t *project,
 		goto fail;
 	}
 
-	if (client_store_open(client,
-	                      project_get_client_config_dir(project, client))
+	if (client_store_open(client, project_get_client_dir(project, client))
 	    && !store_create_config_array(client->store, &array_iter)) {
 		lash_error("Failed to create config array");
 		goto fail;
@@ -310,23 +308,6 @@ project_find_lost_client_by_class(project_t  *project,
 			return client;
 	}
 	return NULL;
-}
-
-const char *
-project_get_client_dir(project_t *project,
-                       struct lash_client  *client)
-{
-	get_store_and_return_fqn(lash_get_fqn(project->directory,
-	                                      PROJECT_ID_DIR),
-	                         client->id_str);
-}
-
-static const char *
-project_get_client_config_dir(project_t *project,
-                              struct lash_client  *client)
-{
-	get_store_and_return_fqn(project_get_client_dir(project, client),
-	                         PROJECT_CONFIG_DIR);
 }
 
 // TODO: - Needs to check for errors so that we can
@@ -381,8 +362,7 @@ project_move(project_t  *project,
 		list_for_each (node, &project->clients) {
 			client = list_entry(node, struct lash_client, siblings);
 			client_store_open(client,
-			                  project_get_client_config_dir(project,
-			                                                client));
+			                  project_get_client_dir(project, client));
 			/* FIXME: check for errors */
 		}
 	}
@@ -628,9 +608,6 @@ project_clear_lost_clients(project_t *project)
 	while (node != head) {
 		client = list_entry(node, struct lash_client, siblings);
 		node = node->next;
-
-		if (lash_dir_exists(client->data_path))
-			lash_remove_dir(client->data_path);
 
 		list_del(&client->siblings);
 		client_destroy(client);
@@ -984,10 +961,6 @@ project_lose_client(project_t *project,
 		else if (lash_dir_exists(client->store->dir))
 			lash_remove_dir(client->store->dir);
 	}
-
-	dir = (const char *) client->data_path;
-	if (lash_dir_exists(dir) && lash_dir_empty(dir))
-		lash_remove_dir(dir);
 
 	dir = lash_get_fqn(project->directory, PROJECT_ID_DIR);
 	if (lash_dir_exists(dir) && lash_dir_empty(dir))

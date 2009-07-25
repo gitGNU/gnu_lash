@@ -43,7 +43,6 @@ struct lash_client
 	uint32_t                flags;
 	char                   *class;
 	char                   *working_dir;
-	char                   *data_path;
 	int                     argc;
 	char                  **argv;
 

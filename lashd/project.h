@@ -215,10 +215,6 @@ struct lash_client *
 project_find_lost_client_by_class(project_t  *project,
                                   const char *class);
 
-const char *
-project_get_client_dir(project_t *project,
-                       struct lash_client  *client);
-
 /** Initiate the process of saving the project. Steps involved:
  * - add the project to project list (if it's new)
  * - create the project directory

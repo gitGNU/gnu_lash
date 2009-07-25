@@ -310,6 +310,7 @@ lash_dbus_quit(method_call_t *call)
 	lash_new_quit_task(client_ptr);
 }
 
+#if 0
 static void
 lash_dbus_path_change_handler(DBusPendingCall *pending,
                               void            *data)
@@ -385,6 +386,7 @@ lash_dbus_try_path_change(method_call_t *call)
 
 	method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
 }
+#endif
 
 static void
 lash_dbus_client_name_changed(method_call_t *call)
@@ -437,9 +439,9 @@ METHOD_ARGS_BEGIN(TrySave)
   METHOD_ARG_DESCRIBE("ok_to_save", "b", DIRECTION_OUT)
 METHOD_ARGS_END
 
-METHOD_ARGS_BEGIN(TryPathChange)
-  METHOD_ARG_DESCRIBE("ok_to_change", "b", DIRECTION_OUT)
-METHOD_ARGS_END
+//METHOD_ARGS_BEGIN(TryPathChange)
+//  METHOD_ARG_DESCRIBE("ok_to_change", "b", DIRECTION_OUT)
+//METHOD_ARGS_END
 
 METHOD_ARGS_BEGIN(ClientNameChanged)
   METHOD_ARG_DESCRIBE("new_name", "s", DIRECTION_IN)
@@ -450,7 +452,7 @@ METHODS_BEGIN
   METHOD_DESCRIBE(Load, lash_dbus_load)
   METHOD_DESCRIBE(Quit, lash_dbus_quit)
   METHOD_DESCRIBE(TrySave, lash_dbus_try_save)
-  METHOD_DESCRIBE(TryPathChange, lash_dbus_try_path_change)
+//  METHOD_DESCRIBE(TryPathChange, lash_dbus_try_path_change)
   METHOD_DESCRIBE(ClientNameChanged, lash_dbus_client_name_changed)
 METHODS_END
 

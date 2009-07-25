@@ -94,7 +94,7 @@ lashd_dbus_connect(method_call_t *call)
 static void
 lashd_dbus_activate(method_call_t *call)
 {
-	const char *sender, *id_str, *wd, *client_name, *project_name, *data_path;
+	const char *sender, *id_str, *wd, *client_name, *project_name;
 	struct lash_client *client;
 
 	if (!(sender = dbus_message_get_sender(call->message))) {
@@ -118,14 +118,12 @@ lashd_dbus_activate(method_call_t *call)
 	id_str = (const char *) client->id_str;
 	client_name = client->name ? client->name : "";
 	project_name = client->project ? client->project->name : "";
-	data_path = client->data_path ? client->data_path : "";
 	wd = client->working_dir ? client->working_dir : "";
 
 	method_return_new_valist(call,
 	                         DBUS_TYPE_STRING, &id_str,
 	                         DBUS_TYPE_STRING, &client_name,
 	                         DBUS_TYPE_STRING, &project_name,
-	                         DBUS_TYPE_STRING, &data_path,
 	                         DBUS_TYPE_STRING, &wd,
 	                         DBUS_TYPE_INVALID);
 }
@@ -395,6 +393,7 @@ lashd_dbus_progress(method_call_t *call)
 	client_task_progressed(client, percentage);
 }
 
+#if 0
 static void
 lashd_dbus_commit_path_change(method_call_t *call)
 {
@@ -418,6 +417,7 @@ lashd_dbus_commit_path_change(method_call_t *call)
 	method_return_new_single(call, DBUS_TYPE_STRING,
 	                         (const void *) &foobar);
 }
+#endif
 
 static __inline__ bool
 get_and_set_config(store_t         *store,
@@ -529,7 +529,6 @@ METHOD_ARGS_BEGIN(Activate)
   METHOD_ARG_DESCRIBE("uuid", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("client_name", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("project_name", "s", DIRECTION_OUT)
-  METHOD_ARG_DESCRIBE("data_path", "s", DIRECTION_OUT)
   METHOD_ARG_DESCRIBE("working_dir", "s", DIRECTION_OUT)
 METHOD_ARGS_END
 
@@ -564,8 +563,8 @@ METHOD_ARGS_BEGIN(CommitData)
   METHOD_ARG_DESCRIBE("configs", "a{sv}", DIRECTION_IN)
 METHOD_ARGS_END
 
-METHOD_ARGS_BEGIN(CommitPathChange)
-METHOD_ARGS_END
+//METHOD_ARGS_BEGIN(CommitPathChange)
+//METHOD_ARGS_END
 
 METHODS_BEGIN
   METHOD_DESCRIBE(Ping, lashd_dbus_ping)
@@ -577,7 +576,7 @@ METHODS_BEGIN
   METHOD_DESCRIBE(GetJackName, lashd_dbus_get_jack_name)
   METHOD_DESCRIBE(Progress, lashd_dbus_progress)
   METHOD_DESCRIBE(CommitData, lashd_dbus_commit_data)
-  METHOD_DESCRIBE(CommitPathChange, lashd_dbus_commit_path_change)
+//  METHOD_DESCRIBE(CommitPathChange, lashd_dbus_commit_path_change)
 METHODS_END
 
 /*
