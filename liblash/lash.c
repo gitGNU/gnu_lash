@@ -381,25 +381,18 @@ lash_client_open(const char      *class,
 {
 	lash_client_t *client = NULL;
 
-	if (class == NULL)
-	{
-		lash_error("Invalid arguments to lash_client_open() - class is NULL");
+	if (!class) {
+		lash_error("Invalid arguments: class parameter is NULL");
 		goto end;
 	}
 
-	/* seq24 usually supplies no class name and we should be able to handle this situation anyway,
-	   to support liblash-less clients */
-#if 0
-	if (class[0] == '\0')
-	{
-		lash_error("Invalid arguments to lash_client_open() - class is empty string");
+	if (!class[0]) {
+		lash_error("Invalid arguments: class parameter is empty");
 		goto end;
 	}
-#endif
 
-	if (!argc || !argv || !argv[0] || !argv[0][0])
-	{
-		lash_error("Invalid arguments to lash_client_open()");
+	if (!argc || !argv || !argv[0] || !argv[0][0]) {
+		lash_error("Invalid arguments: no command-line args");
 		goto end;
 	}
 

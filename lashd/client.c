@@ -316,7 +316,7 @@ client_maybe_fill_class(struct lash_client *client)
 {
 	const char *name;
 
-	if (client->class && client->class[0])
+	if (client->class)
 		return; /* no need to fill class */
 
 	lash_info("Client class string is empty");
