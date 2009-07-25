@@ -103,15 +103,6 @@ lash_set_client_callback(lash_client_t      *client,
                          LashClientCallback  callback,
                          void               *user_data);
 
-void
-lash_wait(lash_client_t *client);
-
-void
-lash_dispatch(lash_client_t *client);
-
-bool
-lash_dispatch_once(lash_client_t *client);
-
 /**
  * Append a key-value pair of data to a Save message.
  *

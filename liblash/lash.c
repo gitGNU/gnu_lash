@@ -585,37 +585,6 @@ lash_activate(lash_client_t *client)
 }
 
 void
-lash_wait(lash_client_t *client)
-{
-	if (client && client->dbus_service)
-		(void) dbus_connection_read_write(client->dbus_service->connection, -1);
-}
-
-void
-lash_dispatch(lash_client_t *client)
-{
-	if (!client || !client->dbus_service)
-		return;
-
-	do
-	{
-		dbus_connection_read_write_dispatch(client->dbus_service->connection, 0);
-	}
-	while (dbus_connection_get_dispatch_status(client->dbus_service->connection) == DBUS_DISPATCH_DATA_REMAINS);
-}
-
-bool
-lash_dispatch_once(lash_client_t *client)
-{
-	return
-	  (client && client->dbus_service
-	   && dbus_connection_read_write_dispatch(client->dbus_service->connection, 0)
-	   && dbus_connection_get_dispatch_status(client->dbus_service->connection)
-	      == DBUS_DISPATCH_DATA_REMAINS)
-	  ? true : false;
-}
-
-void
 lash_notify_progress(lash_client_t *client,
                      uint8_t        percentage)
 {
