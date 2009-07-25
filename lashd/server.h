@@ -33,10 +33,6 @@
 #include "dbus/service.h"
 #include "common/klist.h"
 
-#ifdef HAVE_ALSA
-# include "alsa_mgr.h"
-#endif
-
 extern server_t *g_server;
 
 struct _server
@@ -47,12 +43,6 @@ struct _server
 #else
 	jack_mgr_t           *jack_mgr;
 #endif
-#ifdef HAVE_ALSA
-	alsa_mgr_t           *alsa_mgr;
-#else
-	void                 *alsa_mgr;
-#endif
-
 	char                 *projects_dir;
 	struct list_head      inactive_clients;
 	struct list_head      loaded_projects;

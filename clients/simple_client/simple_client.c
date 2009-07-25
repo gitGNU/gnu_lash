@@ -29,7 +29,6 @@
 #include <sys/types.h>
 
 #include <jack/jack.h>
-#include <alsa/asoundlib.h>
 #include <lash/lash.h>
 
 #define info(fmt, args...) printf(fmt "\n", ## args)
@@ -46,8 +45,6 @@ main(int    argc,
 {
 	lash_client_t *client;
 	jack_client_t *jack_client;
-	snd_seq_t *aseq;
-	snd_seq_client_info_t *aseq_client_info;
 	char client_name[64];
 	int ret = EXIT_FAILURE;
 
@@ -72,25 +69,11 @@ main(int    argc,
 	}
 	info("Connected to JACK with client name '%s'", client_name);
 
-	/* ALSA */
-	info("Opening ALSA sequencer");
-	if (snd_seq_open(&aseq, "default", SND_SEQ_OPEN_DUPLEX, 0) != 0) {
-		error("Failed to open ALSA sequencer");
-		goto end2;
-	}
-	snd_seq_client_info_alloca(&aseq_client_info);
-	snd_seq_get_client_info(aseq, aseq_client_info);
-	snd_seq_client_info_set_name(aseq_client_info, client_name);
-	snd_seq_set_client_info(aseq, aseq_client_info);
-	info("Opened ALSA sequencer with ID %d, name '%s'",
-	     snd_seq_client_id(aseq), client_name);
-
 	/* LASH pt. 2 */
-	lash_alsa_client_id(client, (unsigned char) snd_seq_client_id(aseq));
 	lash_set_client_callback(client, callback, client);
 	if (!lash_activate(client)) {
 		error("Failed to activate LASH client");
-		goto end3;
+		goto end2;
 	}
 	info("Client '%s' is associated with project '%s'",
 	     lash_get_client_name(client), lash_get_project_name(client));
@@ -99,8 +82,6 @@ main(int    argc,
 
 	info("Bye!");
 
-end3:
-	snd_seq_close(aseq);
 end2:
 	jack_client_close(jack_client);
 end:

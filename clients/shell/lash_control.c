@@ -119,7 +119,6 @@ command_list(lash_control_t * control)
 	project_t *project;
 	client_t *client;
 	char client_jack_str[64];
-	char client_alsa_str[32];
 
 	if (!control->projects) {
 		printf("  No projects\n");
@@ -137,20 +136,14 @@ command_list(lash_control_t * control)
 			 clnode = lash_list_next(clnode)) {
 			client = (client_t *) clnode->data;
 
-			if (!client->alsa_client_id)
-				client_alsa_str[0] = '\0';
-			else
-				sprintf(client_alsa_str, ", ALSA client ID: %u",
-						(unsigned int)client->alsa_client_id);
-
 			if (!client->jack_client_name)
 				client_jack_str[0] = '\0';
 			else
 				sprintf(client_jack_str, ", JACK client name: %s",
 						client->jack_client_name);
 
-			printf("    %s%s%s\n", client_get_identity(client),
-				   client_jack_str, client_alsa_str);
+			printf("    %s%s\n", client_get_identity(client),
+				   client_jack_str);
 		}
 	}
 }
@@ -495,15 +488,6 @@ lash_control_cb(enum LASH_Event_Type  type,
 			printf("* Client '%s' set its JACK client name to '%s'\n",
 			       client_get_identity(client), str1);
 			lash_strset(&client->jack_client_name, str1);
-		}
-		break;
-
-	case LASH_Alsa_Client_ID:
-		if (!uuid_is_null(client_id)
-		    && (client = find_client_by_id(control, client_id))) {
-			printf("* Client '%s' set its ALSA client ID to '%u'\n",
-			       client_get_identity(client), lash_str_get_alsa_client_id(str1));
-			client->alsa_client_id = lash_str_get_alsa_client_id(str1);
 		}
 		break;
 

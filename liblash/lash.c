@@ -239,11 +239,8 @@ lash_control_signal_handler(lash_client_t *client,
 	} else if (strcmp(member, "ClientJackNameChanged") == 0) {
 		sig_id = 8;
 		type = LASH_EVENT_CLIENT_JACK_NAME_CHANGED;
-	} else if (strcmp(member, "ClientAlsaIdChanged") == 0) {
-		sig_id = 9;
-		type = LASH_EVENT_CLIENT_ALSA_ID_CHANGED;
 	} else if (strcmp(member, "Progress") == 0) {
-		sig_id = 10;
+		sig_id = 9;
 		type = LASH_EVENT_SERVER_PROGRESS;
 	} else {
 		lash_error("Received unknown signal '%s'", member);
@@ -262,13 +259,6 @@ lash_control_signal_handler(lash_client_t *client,
 		                            DBUS_TYPE_STRING, &str1,
 		                            DBUS_TYPE_STRING, &str2,
 		                            DBUS_TYPE_INVALID);
-	} else if (sig_id == 9) {
-		ret = dbus_message_get_args(message, &err,
-		                            DBUS_TYPE_STRING, &str1,
-		                            DBUS_TYPE_BYTE, &byte_var[0],
-		                            DBUS_TYPE_INVALID);
-		byte_var[1] = '\0';
-		str2 = (const char *) byte_var;
 	} else {
 		ret = dbus_message_get_args(message, &err,
 		                            DBUS_TYPE_BYTE, &byte_var[0],
@@ -284,7 +274,7 @@ lash_control_signal_handler(lash_client_t *client,
 		return;
 	}
 
-	if (sig_id < 5 || sig_id > 9)
+	if (sig_id < 5 || sig_id > 8)
 		uuid_clear(id);
 	else if (uuid_parse(str1, id) == 0) {
 		str1 = str2;
@@ -698,32 +688,6 @@ lash_jack_client_name(lash_client_t *client,
 	                       DBUS_TYPE_STRING, &name);
 
 	lash_debug("Sent JACK name");
-}
-
-void
-lash_alsa_client_id(lash_client_t *client,
-                    unsigned char  id)
-{
-	if (!client) {
-		lash_error("NULL client pointer");
-		return;
-	}
-
-	// TODO: Find some generic place for this
-	if (!client->dbus_service) {
-		lash_error("D-Bus service not running");
-		return;
-	}
-
-	method_call_new_single(client->dbus_service, NULL,
-	                       method_default_handler, false,
-	                       "org.nongnu.LASH",
-	                       "/",
-	                       "org.nongnu.LASH.Server",
-	                       "AlsaId",
-	                       DBUS_TYPE_BYTE, &id);
-
-	lash_debug("Sent ALSA id");
 }
 
 // TODO: Convert to ProjectOpen

@@ -65,35 +65,6 @@ fi
 
 
 ###################
-### --with-alsa ###
-###################
-
-lash_alsa=""
-AC_MSG_CHECKING([whether to build with ALSA MIDI support])
-AC_ARG_WITH(alsa,
-  [AS_HELP_STRING(--with-alsa, [build with ALSA MIDI support [default=auto]])],
-  [case "x$withval" in
-    "xyes")
-      lash_alsa="yes"
-      ;;
-    "xno")
-      lash_alsa="no"
-      ;;
-    *)
-      AC_MSG_ERROR([must use --with-alsa(=yes/no) or --without-alsa])
-      ;;
-  esac]
-)
-if test "x$lash_alsa" = "x"; then
-  AC_MSG_RESULT([auto])
-elif test "x$lash_alsa" = "xyes"; then
-  AC_MSG_RESULT([yes])
-else
-  AC_MSG_RESULT([no])
-fi
-
-
-###################
 ### --with-gtk2 ###
 ###################
 
@@ -201,36 +172,6 @@ PKG_CHECK_MODULES(XML2, libxml-2.0 >= 2.0.0, HAVE_XML2="yes", [
 
 MISSING_OPTIONAL=""
 
-HAVE_ALSA=""
-if test "x$lash_alsa" != "xno"; then
-  PKG_CHECK_MODULES(ALSA, alsa >= 0.9, HAVE_ALSA="maybe", HAVE_ALSA="no")
-
-  if test "x$HAVE_ALSA" = "xmaybe"; then
-    # Check that there's seq functions in the library
-    ORIG_LIBS="$LIBS"
-    LIBS="$LIBS $ALSA_LIBS"
-    ORIG_CFLAGS="$CFLAGS"
-    CFLAGS="$CFLAGS $ALSA_CFLAGS"
-
-    AC_CHECK_FUNC(snd_seq_open, HAVE_ALSA="yes",
-      HAVE_ALSA="no"
-      AC_MSG_WARN([The ALSA library you're using doesn't have sequencer functions]))
-
-    LIBS="$ORIG_LIBS"
-    CFLAGS="$ORIG_CFLAGS"
-  fi
-
-  if test "x$lash_alsa" = "x"; then
-    if test "x$HAVE_ALSA" = "xyes"; then
-      lash_alsa="yes (auto-selected)"
-    else
-      lash_alsa="no (auto-selected)"
-    fi
-  elif test "x$HAVE_ALSA" = "xno"; then
-    MISSING_OPTIONAL="    ALSA >= 0.9"
-  fi
-fi
-
 HAVE_GTK2=""
 if test "x$lash_gtk2" != "xno"; then
   PKG_CHECK_MODULES(GTK2, gtk+-2.0 >= 2.0.0, HAVE_GTK2="yes", HAVE_GTK2="no")
@@ -299,9 +240,6 @@ if test "x$MISSING_REQUIRED$MISSING_OPTIONAL" != "x"; then
   fi
   if test "x$HAVE_XML2" = "xno"; then
     AC_MSG_RESULT([    libxml2:  http://xmlsoft.org/])
-  fi
-  if test "x$HAVE_ALSA" = "xno"; then
-    AC_MSG_RESULT([    ALSA:     http://alsa-project.org/])
   fi
   if test "x$HAVE_GTK2" = "xno"; then
     AC_MSG_RESULT([    GTK+ 2:   http://gtk.org/])
@@ -384,21 +322,6 @@ AC_SUBST(XML2_CFLAGS)
 AC_SUBST(XML2_LIBS)
 AC_DEFINE_UNQUOTED(LASH_XML2_VERSION, "$XML2_VERSION", [The version of libxml2 we're compiling against])
 PC_REQUIRES="$PC_REQUIRES libxml-2.0"
-
-
-############
-### ALSA ###
-############
-
-if test "x$HAVE_ALSA" = "xyes"; then
-  ALSA_VERSION=$(pkg-config --modversion alsa)
-  AC_SUBST(ALSA_CFLAGS)
-  AC_SUBST(ALSA_LIBS)
-  AC_DEFINE(HAVE_ALSA, 1, [ALSA sequencer support])
-  AC_DEFINE_UNQUOTED(LASH_ALSA_VERSION, "$ALSA_VERSION", [The version of alsa we're compiling against])
-  PC_REQUIRES="$PC_REQUIRES alsa"
-fi
-AM_CONDITIONAL(HAVE_ALSA, [test "x$HAVE_ALSA" = "xyes"])
 
 
 ##############
@@ -528,7 +451,6 @@ AC_MSG_RESULT([
   LASH Configured
 
   JACK D-Bus support:    $lash_jack_dbus
-  ALSA MIDI support:     $lash_alsa
   GTK+ 2 clients:        $lash_gtk2
   Readline support:      $lash_readline
   Python bindings:       $lash_python
@@ -539,10 +461,6 @@ AC_MSG_RESULT([
   D-Bus version:         $DBUS_VERSION
   libuuid version:       $UUID_VERSION
   libxml2 version:       $XML2_VERSION])
-
-if test x$HAVE_ALSA = xyes; then
-  AC_MSG_RESULT([  ALSA version:          $ALSA_VERSION])
-fi
 
 if test x$HAVE_GTK2 = xyes; then
   AC_MSG_RESULT([  GTK+ 2 version:        $GTK2_VERSION])
@@ -556,10 +474,6 @@ AC_MSG_RESULT([
   UUID_CFLAGS:  $UUID_CFLAGS
   XML2_CFLAGS:  $XML2_CFLAGS])
 
-if test x$HAVE_ALSA = xyes; then
-  AC_MSG_RESULT([  ALSA_CFLAGS:  $ALSA_CFLAGS])
-fi
-
 if test x$HAVE_GTK2 = xyes; then
   AC_MSG_RESULT([  GTK2_CFLAGS:  $GTK2_CFLAGS])
 fi
@@ -569,10 +483,6 @@ AC_MSG_RESULT([
   DBUS_LIBS:    $DBUS_LIBS
   UUID_LIBS:    $UUID_LIBS
   XML2_LIBS:    $XML2_LIBS])
-
-if test x$HAVE_ALSA = xyes; then
-  AC_MSG_RESULT([  ALSA_LIBS:    $ALSA_LIBS])
-fi
 
 if test x$HAVE_GTK2 = xyes; then
   AC_MSG_RESULT([  GTK2_LIBS:    $GTK2_LIBS])

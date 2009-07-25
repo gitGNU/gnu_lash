@@ -33,16 +33,7 @@ lashd_SOURCES += \
 	jack_fport.c jack_fport.h
 endif
 
-if HAVE_ALSA
-lashd_SOURCES += \
-	alsa_patch.c alsa_patch.h \
-	alsa_fport.c alsa_fport.h \
-	alsa_mgr.c alsa_mgr.h \
-	alsa_client.c alsa_client.h
-endif
-
 lashd_LDADD = \
-	$(ALSA_LIBS) \
 	$(XML2_LIBS) \
 	$(UUID_LIBS) \
 	$(DBUS_LIBS) \
@@ -51,7 +42,6 @@ lashd_LDADD = \
 
 AM_CFLAGS = \
 	$(LASH_CFLAGS) \
-	$(ALSA_CFLAGS) \
 	$(XML2_CFLAGS) \
 	$(DBUS_CFLAGS) \
 	-DDTDDIR=\"$(dtddir)\"
@@ -59,10 +49,6 @@ AM_CFLAGS = \
 if !HAVE_JACK_DBUS
 lashd_LDADD += $(JACK_LIBS)
 AM_CFLAGS += $(JACK_CFLAGS)
-endif
-
-if HAVE_ALSA
-lashd_LDADD += -lpthread
 endif
 
 dtddir = $(pkgdatadir)/dtds
