@@ -393,32 +393,6 @@ lashd_dbus_progress(method_call_t *call)
 	client_task_progressed(client, percentage);
 }
 
-#if 0
-static void
-lashd_dbus_commit_path_change(method_call_t *call)
-{
-	lash_debug("CommitPathChange");
-
-	const char *sender;
-	struct lash_client *client;
-
-	if (!get_message_sender_only_active(call, &sender, &client))
-		return;
-
-	// Here check that there really is a pending path change
-	// for the client, send error return if it isn't so
-
-	// Try to commit the pending path change,
-	// send error return if it fails
-
-	// Let's pretend that we have succesfully changed the path
-	// and are returning the new path name to the client
-	const char *foobar = "/tmp";
-	method_return_new_single(call, DBUS_TYPE_STRING,
-	                         (const void *) &foobar);
-}
-#endif
-
 static __inline__ bool
 get_and_set_config(store_t         *store,
                    DBusMessageIter *iter)
@@ -563,9 +537,6 @@ METHOD_ARGS_BEGIN(CommitData)
   METHOD_ARG_DESCRIBE("configs", "a{sv}", DIRECTION_IN)
 METHOD_ARGS_END
 
-//METHOD_ARGS_BEGIN(CommitPathChange)
-//METHOD_ARGS_END
-
 METHODS_BEGIN
   METHOD_DESCRIBE(Ping, lashd_dbus_ping)
   METHOD_DESCRIBE(Connect, lashd_dbus_connect)
@@ -576,7 +547,6 @@ METHODS_BEGIN
   METHOD_DESCRIBE(GetJackName, lashd_dbus_get_jack_name)
   METHOD_DESCRIBE(Progress, lashd_dbus_progress)
   METHOD_DESCRIBE(CommitData, lashd_dbus_commit_data)
-//  METHOD_DESCRIBE(CommitPathChange, lashd_dbus_commit_path_change)
 METHODS_END
 
 /*

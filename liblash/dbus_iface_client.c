@@ -310,84 +310,6 @@ lash_dbus_quit(method_call_t *call)
 	lash_new_quit_task(client_ptr);
 }
 
-#if 0
-static void
-lash_dbus_path_change_handler(DBusPendingCall *pending,
-                              void            *data)
-{
-	DBusMessage *msg = dbus_pending_call_steal_reply(pending);
-	lash_client_t *client = data;
-	DBusError err;
-	const char *new_path, *err_str;
-
-	if (!msg) {
-		lash_error("Cannot get method return from pending call");
-		goto end;
-	}
-
-	if (!method_return_verify(msg, &err_str)) {
-		lash_error("Server failed to commit path change: %s", err_str);
-		goto end_unref_msg;
-	}
-
-	dbus_error_init(&err);
-
-	if (!dbus_message_get_args(msg, &err,
-	                           DBUS_TYPE_STRING,
-	                           &new_path,
-	                           DBUS_TYPE_INVALID)
-	    || !new_path || !new_path[0]) {
-		lash_error("Cannot get message argument: %s", err.message);
-		dbus_error_free(&err);
-		goto end_unref_msg;
-	}
-
-	lash_strset(&client->data_path, new_path);
-
-	lash_debug("Server set save path to '%s'", new_path);
-
-end_unref_msg:
-	dbus_message_unref(msg);
-
-end:
-	dbus_pending_call_unref(pending);
-}
-
-static void
-lash_dbus_try_path_change(method_call_t *call)
-{
-	dbus_bool_t retval;
-
-	lash_debug("TryPathChange");
-
-	if (client_ptr->pending_task) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_UNFINISHED_TASK,
-		                "Cannot change path now; task %llu is unfinished",
-		                client_ptr->pending_task);
-		return;
-	}
-
-	if (!check_client_cb(client_ptr, call))
-		return;
-
-	/* Check whether the client says it's OK to change the path */
-	if ((retval = client_ptr->client_cb(LASH_EVENT_TRY_PATH_CHANGE,
-	                                    client_ptr->client_data))) {
-		/* Client says path can be changed, send a commit message */
-		method_call_new_void(client_ptr->dbus_service,
-		                     client_ptr,
-		                     lash_dbus_path_change_handler,
-		                     true,
-		                     "org.nongnu.LASH",
-		                     "/",
-		                     "org.nongnu.LASH.Server",
-		                     "CommitPathChange");
-	}
-
-	method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
-}
-#endif
-
 static void
 lash_dbus_client_name_changed(method_call_t *call)
 {
@@ -439,10 +361,6 @@ METHOD_ARGS_BEGIN(TrySave)
   METHOD_ARG_DESCRIBE("ok_to_save", "b", DIRECTION_OUT)
 METHOD_ARGS_END
 
-//METHOD_ARGS_BEGIN(TryPathChange)
-//  METHOD_ARG_DESCRIBE("ok_to_change", "b", DIRECTION_OUT)
-//METHOD_ARGS_END
-
 METHOD_ARGS_BEGIN(ClientNameChanged)
   METHOD_ARG_DESCRIBE("new_name", "s", DIRECTION_IN)
 METHOD_ARGS_END
@@ -452,7 +370,6 @@ METHODS_BEGIN
   METHOD_DESCRIBE(Load, lash_dbus_load)
   METHOD_DESCRIBE(Quit, lash_dbus_quit)
   METHOD_DESCRIBE(TrySave, lash_dbus_try_save)
-//  METHOD_DESCRIBE(TryPathChange, lash_dbus_try_path_change)
   METHOD_DESCRIBE(ClientNameChanged, lash_dbus_client_name_changed)
 METHODS_END
 
