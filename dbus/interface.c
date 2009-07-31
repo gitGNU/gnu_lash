@@ -48,9 +48,9 @@ interface_default_handler(const interface_t *interface,
 
 				/* If the method handler didn't construct a return
 				   message create a void one here */
-				// TODO: Also handle cases where the sender doesn't need a reply
 				if (!call->reply
-				    && !(call->reply = dbus_message_new_method_return(call->message))) {
+				    && (!dbus_message_get_no_reply(call->message)
+				        && !(call->reply = dbus_message_new_method_return(call->message)))) {
 					lash_error("Failed to construct void method return");
 				}
 			} else {
