@@ -168,9 +168,6 @@ method_send(method_msg_t *call,
 
 /*
  * Send a method return.
- *
- * If call->reply is NULL, i.e. a previous attempt to construct
- * a return has failed, attempt to send a void return.
  */
 void
 method_return_send(method_call_t *call)
