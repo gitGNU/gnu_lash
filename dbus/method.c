@@ -176,7 +176,6 @@ void
 method_return_send(method_call_t *call)
 {
 	if (call->reply) {
-	retry_send:
 		if (!dbus_connection_send(call->connection, call->reply, NULL))
 			lash_error("Ran out of memory trying to queue "
 			           "method return");
@@ -185,15 +184,6 @@ method_return_send(method_call_t *call)
 
 		dbus_message_unref(call->reply);
 		call->reply = NULL;
-	} else {
-		lash_debug("Message was NULL, trying to construct a void return");
-
-		if ((call->reply = dbus_message_new_method_return(call->message))) {
-			lash_debug("Constructed a void return, trying to queue it");
-			goto retry_send;
-		} else {
-			lash_error("Failed to construct method return!");
-		}
 	}
 }
 
