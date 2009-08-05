@@ -20,6 +20,7 @@
  */
 
 #include "../config.h"
+#include "dbus_iface_client.h"
 
 #include "common/safety.h"
 #include "common/debug.h"
