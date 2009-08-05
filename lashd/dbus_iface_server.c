@@ -437,7 +437,7 @@ lashd_dbus_commit_data(method_call_t *call)
 	const char *sender;
 	struct lash_client *client;
 	DBusMessageIter iter, array_iter;
-	bool was_successful = true;
+	bool was_successful;
 
 	if (!get_message_sender_only_active(call, &sender, &client))
 		return;
@@ -448,17 +448,19 @@ lashd_dbus_commit_data(method_call_t *call)
 	if (!check_tasks(call, client, &iter))
 		return;
 
+	was_successful = false;
+
 	if (!client->store) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
 		                "Client's store pointer is NULL");
-		return;
+		goto end;
 	}
 
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_INVALID_ARGS,
 		                "Invalid arguments to method \"%s\"",
 		                call->method_name);
-		return;
+		goto end;
 	}
 
 	dbus_message_iter_recurse(&iter, &array_iter);
@@ -466,8 +468,10 @@ lashd_dbus_commit_data(method_call_t *call)
 	if (dbus_message_iter_get_arg_type(&array_iter) == DBUS_TYPE_INVALID) {
 		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
 		                "Message contains no configs");
-		return;
+		goto end;
 	}
+
+	was_successful = true;
 
 	/* Loop through the configs and commit them to the store */
 	do {
@@ -479,7 +483,7 @@ lashd_dbus_commit_data(method_call_t *call)
 		}
 	} while (dbus_message_iter_next(&array_iter));
 
-	/* Sending a valid data set implies task completion */
+end:
 	client_task_completed(client, was_successful);
 }
 
