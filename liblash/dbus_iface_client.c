@@ -35,45 +35,6 @@
 
 #define client_ptr ((lash_client_t *)(((object_path_t *)call->context)->context))
 
-static void
-lash_dbus_try_save_handler(DBusPendingCall *pending,
-                           void            *data)
-{
-	DBusMessage *msg = dbus_pending_call_steal_reply(pending);
-	DBusError err;
-	dbus_bool_t response;
-	const char *err_str;
-
-	if (!msg) {
-		lash_error("Cannot get method return from pending call");
-		goto end;
-	}
-
-	if (!method_return_verify(msg, &err_str)) {
-		lash_error("Server failed to : %s", err_str);
-		goto end_unref_msg;
-	}
-
-	dbus_error_init(&err);
-
-	if (!dbus_message_get_args(msg, &err,
-	                           DBUS_TYPE_BOOLEAN,
-	                           &response,
-	                           DBUS_TYPE_INVALID)) {
-		lash_error("Cannot get message argument: %s", err.message);
-		dbus_error_free(&err);
-		goto end_unref_msg;
-	}
-
-	lash_debug("Server says: Saving is %s", response ? "OK" : "not OK");
-
-end_unref_msg:
-	dbus_message_unref(msg);
-
-end:
-	dbus_pending_call_unref(pending);
-}
-
 bool
 check_client_cb(lash_client_t *client,
                 method_call_t *call)
@@ -88,39 +49,6 @@ check_client_cb(lash_client_t *client,
 		lash_error("Client callback not registered");
 
 	return false;
-}
-
-
-static void
-lash_dbus_try_save(method_call_t *call)
-{
-	dbus_bool_t retval;
-
-	lash_debug("TrySave");
-
-	if (client_ptr->pending_task) {
-		lash_dbus_error(call, LASH_DBUS_ERROR_UNFINISHED_TASK,
-		                "Cannot save now; task %llu is unfinished",
-		                client_ptr->pending_task);
-		return;
-	}
-
-	if (!check_client_cb(client_ptr, call))
-		return;
-
-	/* Check whether the client says it's OK to save */
-	if ((retval = client_ptr->client_cb(LASH_EVENT_TRYSAVE,
-	                                    client_ptr->client_data))) {
-		/* Client says it can save  */
-		method_call_new_void(client_ptr->dbus_service, NULL,
-		                     lash_dbus_try_save_handler, true, true,
-		                     "org.nongnu.LASH",
-		                     "/",
-		                     "org.nongnu.LASH.Server",
-		                     "WaitForSave");
-	}
-
-	method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
 }
 
 /* Report task completion or failure to the LASH server */
@@ -341,10 +269,6 @@ METHOD_ARGS_END
 METHOD_ARGS_BEGIN(Quit)
 METHOD_ARGS_END
 
-METHOD_ARGS_BEGIN(TrySave)
-  METHOD_ARG_DESCRIBE("ok_to_save", "b", DIRECTION_OUT)
-METHOD_ARGS_END
-
 METHOD_ARGS_BEGIN(ClientNameChanged)
   METHOD_ARG_DESCRIBE("new_name", "s", DIRECTION_IN)
 METHOD_ARGS_END
@@ -353,7 +277,6 @@ METHODS_BEGIN
   METHOD_DESCRIBE(Save, lash_dbus_save)
   METHOD_DESCRIBE(Load, lash_dbus_load)
   METHOD_DESCRIBE(Quit, lash_dbus_quit)
-  METHOD_DESCRIBE(TrySave, lash_dbus_try_save)
   METHOD_DESCRIBE(ClientNameChanged, lash_dbus_client_name_changed)
 METHODS_END
 

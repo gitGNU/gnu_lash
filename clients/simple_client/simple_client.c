@@ -148,8 +148,6 @@ callback(enum LashEvent  type,
 	lash_client_t *client = user_data;
 
 	switch (type) {
-	case LASH_EVENT_TRYSAVE:
-		return true;
 	case LASH_EVENT_SAVE:
 		info("Client saving");
 		return save(client);
