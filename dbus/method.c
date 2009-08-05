@@ -26,21 +26,6 @@
 #include "dbus/service.h"
 
 /*
- * Construct a void method return.
- *
- * The operation can only fail due to lack of memory, in which case
- * there's no sense in trying to construct an error return. Instead,
- * call->reply will be set to NULL and handled in send_method_return().
- */
-void
-method_return_new_void(method_call_t *call)
-{
-	if (!(call->reply = dbus_message_new_method_return(call->message))) {
-		lash_error("Ran out of memory trying to construct method return");
-	}
-}
-
-/*
  * Construct a method return which holds a single argument or, if
  * the type parameter is DBUS_TYPE_INVALID, no arguments at all
  * (a void message).

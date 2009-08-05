@@ -64,9 +64,6 @@ struct _method
 };
 
 void
-method_return_new_void(method_call_t *call);
-
-void
 method_return_new_single(method_call_t *call,
                          int            type,
                          const void    *arg);
