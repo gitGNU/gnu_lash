@@ -212,7 +212,7 @@ lash_dbus_service_connect(lash_client_t *client)
 
 	lash_debug("Sending connection request to LASH server");
 
-	if (!method_send(&call, true)) {
+	if (!method_send(&call, true, true)) {
 		lash_error("Failed to send Connect message");
 		return false;
 	}
@@ -247,7 +247,7 @@ lash_dbus_service_activate(lash_client_t *client)
 		return false;
 	}
 
-	if (!method_send(&call, true)) {
+	if (!method_send(&call, true, true)) {
 		lash_error("Failed to send Activate message");
 		return false;
 	}

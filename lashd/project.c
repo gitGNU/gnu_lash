@@ -273,7 +273,7 @@ project_load_client(project_t *project,
 		goto fail;
 	}
 
-	if (!method_send(&new_call, false)) {
+	if (!method_send(&new_call, true, false)) {
 		lash_error("Failed to send Load method call");
 		/* method_send has unref'd the message for us */
 		return;

@@ -112,10 +112,8 @@ lash_dbus_try_save(method_call_t *call)
 	if ((retval = client_ptr->client_cb(LASH_EVENT_TRYSAVE,
 	                                    client_ptr->client_data))) {
 		/* Client says it can save  */
-		method_call_new_void(client_ptr->dbus_service,
-		                     NULL,
-		                     lash_dbus_try_save_handler,
-		                     true,
+		method_call_new_void(client_ptr->dbus_service, NULL,
+		                     lash_dbus_try_save_handler, true, true,
 		                     "org.nongnu.LASH",
 		                     "/",
 		                     "org.nongnu.LASH.Server",
@@ -139,7 +137,7 @@ report_success_or_failure(lash_client_t *client,
 
 	/* Send a success or failure report */
 	method_call_new_valist(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Server",
@@ -180,7 +178,7 @@ lash_new_save_task(lash_client_t *client,
 				goto unref;
 			}
 
-			if ((retval = method_send(&client->task_msg, false)))
+			if ((retval = method_send(&client->task_msg, false, false)))
 				goto end;
 
 			lash_error("Failed to send CommitData method call");
@@ -239,10 +237,6 @@ lash_dbus_save(method_call_t *call)
 	if (!get_task_id(call, &task_id, NULL))
 		return;
 
-	/* Send a void return here to avoid possible timeout */
-	call->reply = dbus_message_new_method_return(call->message);
-	method_return_send(call);
-
 	lash_new_save_task(client_ptr, task_id);
 }
 
@@ -266,10 +260,6 @@ lash_dbus_load(method_call_t *call)
 		                call->method_name);
 		return;
 	}
-
-	/* Send a void return here to avoid possible timeout */
-	call->reply = dbus_message_new_method_return(call->message);
-	method_return_send(call);
 
 	dbus_message_iter_recurse(&iter, &client_ptr->task_msg_array_iter);
 
@@ -301,12 +291,6 @@ lash_new_quit_task(lash_client_t *client)
 static void
 lash_dbus_quit(method_call_t *call)
 {
-	/* Send a return right away to prevent LASH from getting an error
-	   from the bus daemon if the clients decides to exit() in its
-	   callback. */
-	call->reply = dbus_message_new_method_return(call->message);
-	method_return_send(call);
-
 	lash_new_quit_task(client_ptr);
 }
 

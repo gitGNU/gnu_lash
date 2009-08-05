@@ -129,6 +129,7 @@ fail_no_mem:
  */
 bool
 method_send(method_msg_t *call,
+            bool          want_reply,
             bool          will_block)
 {
 	if (!call->message) {
@@ -138,6 +139,9 @@ method_send(method_msg_t *call,
 
 	DBusPendingCall *pending = NULL;
 	bool retval;
+
+	if (!want_reply)
+		dbus_message_set_no_reply(call->message, true);
 
 	if (!dbus_connection_send_with_reply(call->service->connection,
 	                                     call->message, &pending, -1)) {
@@ -160,6 +164,8 @@ method_send(method_msg_t *call,
 
 	if (will_block && pending) {
 		lash_debug("Blocking until a return arrives");
+		if (!want_reply)
+			lash_warn("Sent message requires no reply, we may wait here forever!");
 		dbus_pending_call_block(pending);
 	}
 
@@ -372,6 +378,7 @@ bool
 method_call_new_void(service_t                     *service,
                      void                          *return_context,
                      DBusPendingCallNotifyFunction  return_handler,
+                     bool                           want_reply,
                      bool                           will_block,
                      const char                    *destination,
                      const char                    *path,
@@ -382,7 +389,7 @@ method_call_new_void(service_t                     *service,
 
 	if (method_call_init(&call, service, return_context, return_handler,
 	                     destination, path, interface, method))
-		return method_send(&call, will_block);
+		return method_send(&call, want_reply, will_block);
 
 	return false;
 }
@@ -391,6 +398,7 @@ bool
 method_call_new_single(service_t                     *service,
                        void                          *return_context,
                        DBusPendingCallNotifyFunction  return_handler,
+                       bool                           want_reply,
                        bool                           will_block,
                        const char                    *destination,
                        const char                    *path,
@@ -414,7 +422,7 @@ method_call_new_single(service_t                     *service,
 	dbus_message_iter_init_append(call.message, &iter);
 
 	if (dbus_message_iter_append_basic(&iter, type, arg)) {
-		return method_send(&call, will_block);
+		return method_send(&call, want_reply, will_block);
 	}
 
 	lash_error("Ran out of memory trying to append method call argument");
@@ -429,6 +437,7 @@ bool
 method_call_new_valist(service_t                     *service,
                        void                          *return_context,
                        DBusPendingCallNotifyFunction  return_handler,
+                       bool                           want_reply,
                        bool                           will_block,
                        const char                    *destination,
                        const char                    *path,
@@ -453,7 +462,7 @@ method_call_new_valist(service_t                     *service,
 
 	if (dbus_message_append_args_valist(call.message, type, argp)) {
 		va_end(argp);
-		return method_send(&call, will_block);
+		return method_send(&call, want_reply, will_block);
 	}
 
 	va_end(argp);

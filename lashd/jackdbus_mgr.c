@@ -110,8 +110,7 @@ lashd_jackdbus_mgr_is_server_started()
 	if (!method_call_new_void(
 		g_server->dbus_service,
 		&is_started,
-		lashd_jackdbus_mgr_is_server_started_return_handler,
-		true,
+		lashd_jackdbus_mgr_is_server_started_return_handler, true, true,
 		JACKDBUS_SERVICE,
 		JACKDBUS_OBJECT,
 		JACKDBUS_IFACE_CONTROL,
@@ -327,8 +326,7 @@ lashd_jackdbus_get_client_pid(dbus_uint64_t client_id)
 
 	pid = 0;
 	if (!method_call_new_valist(g_server->dbus_service, &pid,
-	                            lashd_jackdbus_get_client_pid_return_handler,
-	                            true,
+	                            lashd_jackdbus_get_client_pid_return_handler, true, true,
 	                            JACKDBUS_SERVICE,
 	                            JACKDBUS_OBJECT,
 	                            JACKDBUS_IFACE_PATCHBAY,
@@ -501,22 +499,16 @@ lashd_jackdbus_mgr_connect_ports(const char *client1_name,
 	           client1_name, port1_name, client2_name, port2_name);
 
 	/* Send a port connect request */
-	method_call_new_valist(g_server->dbus_service,
-	                       NULL,
-	                       lashd_jackdbus_connect_return_handler,
-	                       false,
+	method_call_new_valist(g_server->dbus_service, NULL,
+	                       lashd_jackdbus_connect_return_handler, false, false,
 	                       JACKDBUS_SERVICE,
 	                       JACKDBUS_OBJECT,
 	                       JACKDBUS_IFACE_PATCHBAY,
 	                       "ConnectPortsByName",
-	                       DBUS_TYPE_STRING,
-	                       &client1_name,
-	                       DBUS_TYPE_STRING,
-	                       &port1_name,
-	                       DBUS_TYPE_STRING,
-	                       &client2_name,
-	                       DBUS_TYPE_STRING,
-	                       &port2_name,
+	                       DBUS_TYPE_STRING, &client1_name,
+	                       DBUS_TYPE_STRING, &port1_name,
+	                       DBUS_TYPE_STRING, &client2_name,
+	                       DBUS_TYPE_STRING, &port2_name,
 	                       DBUS_TYPE_INVALID);
 }
 
@@ -1442,16 +1434,13 @@ lashd_jackdbus_mgr_get_graph(lashd_jackdbus_mgr_t *mgr)
 
 	lash_debug("Requesting graph version >= %llu", mgr->graph_version);
 
-	method_call_new_single(g_server->dbus_service,
-	                       NULL,
-	                       lashd_jackdbus_mgr_graph_return_handler,
-	                       true,
+	method_call_new_single(g_server->dbus_service, NULL,
+	                       lashd_jackdbus_mgr_graph_return_handler, true, true,
 	                       JACKDBUS_SERVICE,
 	                       JACKDBUS_OBJECT,
 	                       JACKDBUS_IFACE_PATCHBAY,
 	                       "GetGraph",
-	                       DBUS_TYPE_UINT64,
-	                       &mgr->graph_version);
+	                       DBUS_TYPE_UINT64, &mgr->graph_version);
 }
 
 /* EOF */

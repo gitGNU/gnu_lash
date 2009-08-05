@@ -94,6 +94,7 @@ method_iter_append_dict_entry(DBusMessageIter *iter,
 
 bool
 method_send(method_msg_t *call,
+            bool          want_reply,
             bool          will_block);
 
 void
@@ -117,6 +118,7 @@ bool
 method_call_new_void(service_t                     *service,
                      void                          *return_context,
                      DBusPendingCallNotifyFunction  return_handler,
+                     bool                           want_reply,
                      bool                           will_block,
                      const char                    *destination,
                      const char                    *path,
@@ -127,6 +129,7 @@ bool
 method_call_new_single(service_t                     *service,
                        void                          *return_context,
                        DBusPendingCallNotifyFunction  return_handler,
+                       bool                           want_reply,
                        bool                           will_block,
                        const char                    *destination,
                        const char                    *path,
@@ -139,6 +142,7 @@ bool
 method_call_new_valist(service_t                     *service,
                        void                          *return_context,
                        DBusPendingCallNotifyFunction  return_handler,
+                       bool                           want_reply,
                        bool                           will_block,
                        const char                    *destination,
                        const char                    *path,

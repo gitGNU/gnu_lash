@@ -63,7 +63,7 @@ lash_client_thread(void *arg)
 
 	if (client->flags & LashClientIsOrdinary)
 		method_call_new_void(client->dbus_service, NULL,
-		                     method_default_handler, false,
+		                     method_default_handler, false, false,
 		                     "org.nongnu.LASH",
 		                     "/",
 		                     "org.nongnu.LASH.Server",
@@ -596,7 +596,7 @@ lash_notify_progress(lash_client_t *client,
 		percentage = 99;
 
 	method_call_new_valist(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Server",
@@ -642,7 +642,7 @@ lash_jack_client_name(lash_client_t *client,
 	}
 
 	method_call_new_single(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Server",
@@ -669,7 +669,7 @@ lash_control_load_project_path(lash_client_t *client,
 	}
 
 	method_call_new_single(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Control",
@@ -696,7 +696,7 @@ lash_control_name_project(lash_client_t *client,
 	}
 
 	method_call_new_valist(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Control",
@@ -725,7 +725,7 @@ lash_control_move_project(lash_client_t *client,
 	}
 
 	method_call_new_valist(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Control",
@@ -753,7 +753,7 @@ lash_control_save_project(lash_client_t *client,
 	}
 
 	method_call_new_single(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Control",
@@ -779,7 +779,7 @@ lash_control_close_project(lash_client_t *client,
 	}
 
 	method_call_new_single(client->dbus_service, NULL,
-	                       method_default_handler, false,
+	                       method_default_handler, false, false,
 	                       "org.nongnu.LASH",
 	                       "/",
 	                       "org.nongnu.LASH.Control",
