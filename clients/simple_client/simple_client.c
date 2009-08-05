@@ -149,8 +149,6 @@ callback(enum LashEvent  type,
 
 	switch (type) {
 	case LASH_EVENT_TRYSAVE:
-	case LASH_EVENT_TRY_PATH_CHANGE:
-	case LASH_EVENT_CHANGE_PATH:
 		return true;
 	case LASH_EVENT_SAVE:
 		info("Client saving");
