@@ -38,6 +38,16 @@ enum LashEvent
 	LASH_EVENT_SAVE,
 	LASH_EVENT_LOAD,
 	LASH_EVENT_QUIT,
+
+	/** The server sends this event to the client to query whether it can be
+	    interrupted at that moment.  If the client accepts the interrupt the
+	    server may follow with another call, typically a snapshot request,
+	    which may take the client significant time to fulfill.
+	    Simple LASH clients can automatically return true from the client
+	    callback for this event, more complex ones must rely on an internal
+	    evaluation of some kind. */
+	LASH_EVENT_INTERRUPT,
+
 	LASH_EVENT_CHANGE_NAME,
 	LASH_EVENT_CHANGE_PROJECT,
 	LASH_EVENT_CHANGE_PROJECT_NAME,

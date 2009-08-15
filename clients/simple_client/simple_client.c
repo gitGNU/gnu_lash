@@ -148,6 +148,9 @@ callback(enum LashEvent  type,
 	lash_client_t *client = user_data;
 
 	switch (type) {
+	/* We are always interruptible */
+	case LASH_EVENT_INTERRUPT:
+		return true;
 	case LASH_EVENT_SAVE:
 		info("Client saving");
 		return save(client);
