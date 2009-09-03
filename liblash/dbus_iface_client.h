@@ -31,9 +31,18 @@ extern const interface_t g_liblash_interface_client;
 
 // TODO: These three belong somewhere else; client.h perhaps?
 
+/** Run the client callback for @ref LashEvent @a task_event. Commit any data
+ * written inside the callback with @ref lash_write() to the server, and send
+ * a success or failure message if necessary.<br />
+ * This function is meant to be used only for save-type tasks.
+ * @param client Pointer to client.
+ * @param task_id Task ID.
+ * @param task_event Task event type.
+ */
 void
-lash_new_save_task(lash_client_t *client,
-                   dbus_uint64_t  task_id);
+lash_new_save_task(lash_client_t  *client,
+                   dbus_uint64_t   task_id,
+                   enum LashEvent  task_event);
 
 void
 lash_new_quit_task(lash_client_t *client);

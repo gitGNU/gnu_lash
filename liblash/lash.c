@@ -136,7 +136,7 @@ lash_server_signal_handler(lash_client_t *client,
 			return;
 
 		if (!client->pending_task)
-			lash_new_save_task(client, task_id);
+			lash_new_save_task(client, task_id, LASH_EVENT_SAVE);
 		else
 			lash_error("Task %llu is unfinished", client->pending_task);
 

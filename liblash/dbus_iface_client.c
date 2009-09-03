@@ -77,8 +77,9 @@ report_success_or_failure(lash_client_t *client,
 }
 
 void
-lash_new_save_task(lash_client_t *client,
-                   dbus_uint64_t  task_id)
+lash_new_save_task(lash_client_t  *client,
+                   dbus_uint64_t   task_id,
+                   enum LashEvent  task_event)
 {
 	bool retval;
 
@@ -87,11 +88,11 @@ lash_new_save_task(lash_client_t *client,
 	if (!(retval = check_client_cb(client, NULL)))
 		goto report;
 
-	client->task_event = LASH_EVENT_SAVE;
+	client->task_event = (uint8_t) task_event;
 	client->task_progress = 0;
 
 	/* Call the client callback */
-	if (!(retval = client->client_cb(LASH_EVENT_SAVE, client->client_data)))
+	if (!(retval = client->client_cb(task_event, client->client_data)))
 		lash_error("Callback failed");
 
 	client->task_event = LASH_EVENT_INVALID;
@@ -166,7 +167,7 @@ lash_dbus_save(method_call_t *call)
 	if (!get_task_id(call, &task_id, NULL))
 		return;
 
-	lash_new_save_task(client_ptr, task_id);
+	lash_new_save_task(client_ptr, task_id, LASH_EVENT_SAVE);
 }
 
 static void
