@@ -135,10 +135,12 @@ lash_server_signal_handler(lash_client_t *client,
 		    || strcmp(client->project_name, project_name) != 0)
 			return;
 
-		if (!client->pending_task)
-			lash_new_save_task(client, task_id, LASH_EVENT_SAVE);
-		else
+		if (!client->pending_task) {
+			client->pending_task = task_id;
+			lash_new_save_task(client, LASH_EVENT_SAVE);
+		} else {
 			lash_error("Task %llu is unfinished", client->pending_task);
+		}
 
 		//lash_info("Save signal for project '%s' processed.", project_name); fflush(stdout);
 

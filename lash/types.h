@@ -48,6 +48,18 @@ enum LashEvent
 	    evaluation of some kind. */
 	LASH_EVENT_INTERRUPT,
 
+	/** The server sends this event to the client to request a snapshot.
+	    The client must not reject it unless an error happens; when the
+	    client receives this event it has by then wilfully accepted a
+	    @a LASH_EVENT_INTERRUPT event.
+	    The snapshot event is similar to the save event in that the client
+	    is expected to input data using @ref lash_write.  Simple clients
+	    will in fact behave exactly the same for both events.
+	    Clients are free to choose how they implement snapshotting
+	    internally.  However, if a client chooses not to implement
+	    snapshotting at all it must default to @a LASH_EVENT_SAVE. */
+	LASH_EVENT_SNAPSHOT,
+
 	LASH_EVENT_CHANGE_NAME,
 	LASH_EVENT_CHANGE_PROJECT,
 	LASH_EVENT_CHANGE_PROJECT_NAME,

@@ -67,6 +67,15 @@ struct _project
 	uint32_t          client_tasks_total;
 	uint32_t          client_tasks_pending;
 	uint32_t          client_tasks_progress; // Min is 0, max is client_tasks_total*100
+
+	uint32_t          snapshot_counter; /**< TODO */
+	struct list_head  snapshot_waiters; /**< TODO */
+};
+
+struct project_snapshot_waiter
+{
+	struct list_head  list_hook;
+	DBusMessage      *reply;
 };
 
 /** Create a new, empty project object, without setting the directory. Initializes
@@ -225,6 +234,18 @@ project_find_lost_client_by_class(project_t  *project,
  */
 void
 project_save(project_t *project);
+
+/** Take a snapshot of the project.
+ * @return False if snapshotting failed, otherwise true.
+ */
+bool
+project_take_snapshot(project_t *project);
+
+void
+project_run_snapshot(project_t *project);
+
+void
+project_abort_snapshot(project_t *project);
 
 void
 project_satisfy_client_dependency(project_t *project,

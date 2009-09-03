@@ -323,6 +323,7 @@ lashd_dbus_close_project(method_call_t *call)
 }
 #endif
 
+// TODO: Rename 'tasks' concept to 'return id' or similar, the current one is confusing
 static bool
 check_tasks(method_call_t   *call,
             struct lash_client        *client,
@@ -424,6 +425,55 @@ get_and_set_config(store_t         *store,
 		lash_error("Unsupported config type '%c'", (char) type);
 		return false;
 	}
+}
+
+/** This is the method handler for @a org.nongnu.LASH.Server.WaitSnapshot.
+ * Clients call this method to signal their readiness after having been asked
+ * if they are able to take a snapshot.<br />
+ * Callers are put in a queue, and as soon as each client belonging to the same
+ * snapshot task has called back, the queue is released by sending replies to
+ * all clients at once. The replies tell the clients whether to commence the
+ * snapshot or not.
+ * @param call Pointer to the method call.
+ */
+static void
+lashd_dbus_wait_snapshot(method_call_t *call)
+{
+	const char *sender;
+	struct lash_client *client;
+	project_t *project;
+	struct project_snapshot_waiter *waiter;
+
+	lash_debug("WaitSnapshot");
+
+	/* If we can't find the sender in the active clients, or the task id is
+	   invalid, we can't do anything but return as we don't even have info
+	   about any snapshot to abort */
+	if (!get_message_sender_only_active(call, &sender, &client)
+	    ||!check_tasks(call, client, NULL))
+		return;
+
+	/* TODO: Describe */
+	waiter = lash_malloc(1, sizeof(struct project_snapshot_waiter));
+	if (!(waiter->reply = dbus_message_new_method_return(call->message))) {
+		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
+		                "Failed to create method return");
+		free(waiter);
+		project_abort_snapshot(project);
+		return;
+	}
+
+	/* Add the waiter to the snapshot_waiters queue */
+	INIT_LIST_HEAD(&waiter->list_hook);
+	list_add_tail(&waiter->list_hook, &project->snapshot_waiters);
+
+	/* Prevent the handler from sending a reply, we need to postpone it
+	   until project_run_snapshot() or project_abort_snapshot() */
+	dbus_message_set_no_reply(call->message, true);
+
+	/* Once all of the clients have called back we can finally snapshot */
+	if (++project->snapshot_counter == project->client_tasks_total)
+		project_run_snapshot(project);
 }
 
 /* The CommitData method is used by the client to deliver its data set
@@ -536,6 +586,10 @@ METHOD_ARGS_BEGIN(Progress)
   METHOD_ARG_DESCRIBE("percentage", "y", DIRECTION_IN)
 METHOD_ARGS_END
 
+METHOD_ARGS_BEGIN(WaitSnapshot)
+  METHOD_ARG_DESCRIBE("snapshot_ok", "b", DIRECTION_OUT)
+METHOD_ARGS_END
+
 METHOD_ARGS_BEGIN(CommitData)
   METHOD_ARG_DESCRIBE("task_id", "t", DIRECTION_IN)
   METHOD_ARG_DESCRIBE("configs", "a{sv}", DIRECTION_IN)
@@ -550,6 +604,7 @@ METHODS_BEGIN
   METHOD_DESCRIBE(GetName, lashd_dbus_get_name)
   METHOD_DESCRIBE(GetJackName, lashd_dbus_get_jack_name)
   METHOD_DESCRIBE(Progress, lashd_dbus_progress)
+  METHOD_DESCRIBE(WaitSnapshot, lashd_dbus_wait_snapshot)
   METHOD_DESCRIBE(CommitData, lashd_dbus_commit_data)
 METHODS_END
 

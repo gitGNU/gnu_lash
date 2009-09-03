@@ -53,6 +53,7 @@ struct lash_client
 	dbus_uint64_t           pending_task;
 	uint8_t                 task_type;
 	uint8_t                 task_progress;
+	project_t              *task_project; /**< Pointer to project the client is performing the task for. */
 
 	char                   *jack_client_name;
 	struct list_head        jack_patches;

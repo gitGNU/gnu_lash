@@ -442,6 +442,19 @@ server_save_all_projects(void)
 	}
 }
 
+bool
+server_take_snapshot(void)
+{
+	project_t *project;
+
+	if (!(project = list_entry(g_server->loaded_projects.next, project_t, siblings_loaded))) {
+		lash_error("Cannot find currently active project");
+		return false;
+	}
+
+	return project_take_snapshot(project);
+}
+
 struct lash_client *
 server_add_inactive_client(const char  *dbus_name,
                            pid_t        pid,

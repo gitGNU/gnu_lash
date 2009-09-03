@@ -36,6 +36,55 @@
 
 #define client_ptr ((lash_client_t *)(((object_path_t *)call->context)->context))
 
+/** This handler parses the reply sent by the server to a WaitSnapshot call.
+ * The message is verified and a boolean value @a snapshot_ok is extracted,
+ * based on which the client may initiate a new snapshot task.
+ * @param pending Pointer to the D-Bus pending call object containing the reply.
+ * @param data Pointer to user data, in this case a @ref lash_client_t object.
+ */
+static void
+lash_dbus_wait_snapshot_handler(DBusPendingCall *pending,
+                                void            *data)
+{
+	lash_client_t *client = data;
+	DBusMessage *msg = dbus_pending_call_steal_reply(pending);
+	DBusError err;
+	dbus_bool_t snapshot_ok;
+	const char *err_str;
+
+	if (!msg) {
+		lash_error("Cannot get method return from pending call");
+		goto end;
+	}
+
+	if (!method_return_verify(msg, &err_str)) {
+		lash_error("Server returned an error: %s", err_str);
+		goto end_unref_msg;
+	}
+
+	dbus_error_init(&err);
+
+	/* Read the server's response to whether the client can proceed with
+	   the snapshot. */
+	if (!dbus_message_get_args(msg, &err,
+	                           DBUS_TYPE_BOOLEAN, &snapshot_ok,
+	                           DBUS_TYPE_INVALID)) {
+		lash_error("Cannot get message argument: %s", err.message);
+		dbus_error_free(&err);
+		goto end_unref_msg;
+	}
+
+	if (snapshot_ok)
+		lash_new_save_task(client, LASH_EVENT_SNAPSHOT);
+	else
+		client->pending_task = 0;
+
+end_unref_msg:
+	dbus_message_unref(msg);
+end:
+	dbus_pending_call_unref(pending);
+}
+
 bool
 check_client_cb(lash_client_t *client,
                 method_call_t *call)
@@ -77,13 +126,10 @@ report_success_or_failure(lash_client_t *client,
 }
 
 void
-lash_new_save_task(lash_client_t  *client,
-                   dbus_uint64_t   task_id,
+lash_new_save_task(lash_client_t *client,
                    enum LashEvent  task_event)
 {
 	bool retval;
-
-	client->pending_task = task_id;
 
 	if (!(retval = check_client_cb(client, NULL)))
 		goto report;
@@ -157,6 +203,43 @@ get_task_id(method_call_t   *call,
 	return true;
 }
 
+/** This is the client's TrySnapshot method handler. The server calls it to
+ * query whether the client can be interrupted and thus snapshotted.<br />
+ * Most often LASH will only do batch snapshots that will commence if and only
+ * if none of the clients queried reject it. Only clients which reject the
+ * query actually return the @a snapshot_ok parameter, everyone else calls the
+ * server back straight from inside the TrySnapshot method handler.
+ * @param call Pointer to the method call object. It is handled by liblash and
+               must not be freed manually.
+ */
+static void
+lash_dbus_try_snapshot(method_call_t *call)
+{
+	dbus_uint64_t task_id;
+	dbus_bool_t retval;
+
+	lash_debug("TrySnapshot");
+
+	if (!get_task_id(call, &task_id, NULL)
+	    || !check_client_cb(client_ptr, call))
+		return;
+
+	/* If it's not OK to interrupt the client reply with 'snapshot_ok=false' */
+	if (!(retval = client_ptr->client_cb(LASH_EVENT_INTERRUPT, client_ptr->client_data))) {
+		method_return_new_single(call, DBUS_TYPE_BOOLEAN, &retval);
+		return;
+	}
+
+	/* The client can snapshot, call the server and wait for it to acknowledge */
+	client_ptr->pending_task = task_id;
+	method_call_new_void(client_ptr->dbus_service, client_ptr,
+	                     lash_dbus_wait_snapshot_handler, true, true,
+	                     "org.nongnu.LASH",
+	                     "/",
+	                     "org.nongnu.LASH.Server",
+	                     "WaitSnapshot");
+}
+
 static void
 lash_dbus_save(method_call_t *call)
 {
@@ -167,7 +250,8 @@ lash_dbus_save(method_call_t *call)
 	if (!get_task_id(call, &task_id, NULL))
 		return;
 
-	lash_new_save_task(client_ptr, task_id, LASH_EVENT_SAVE);
+	client_ptr->pending_task = task_id;
+	lash_new_save_task(client_ptr, LASH_EVENT_SAVE);
 }
 
 static void
@@ -271,6 +355,11 @@ METHOD_ARGS_END
 METHOD_ARGS_BEGIN(Quit)
 METHOD_ARGS_END
 
+METHOD_ARGS_BEGIN(TrySnapshot)
+  METHOD_ARG_DESCRIBE("task_id", "t", DIRECTION_IN)
+  METHOD_ARG_DESCRIBE("snapshot_ok", "b", DIRECTION_OUT)
+METHOD_ARGS_END
+
 METHOD_ARGS_BEGIN(ClientNameChanged)
   METHOD_ARG_DESCRIBE("new_name", "s", DIRECTION_IN)
 METHOD_ARGS_END
@@ -279,6 +368,7 @@ METHODS_BEGIN
   METHOD_DESCRIBE(Save, lash_dbus_save)
   METHOD_DESCRIBE(Load, lash_dbus_load)
   METHOD_DESCRIBE(Quit, lash_dbus_quit)
+  METHOD_DESCRIBE(TrySnapshot, lash_dbus_try_snapshot)
   METHOD_DESCRIBE(ClientNameChanged, lash_dbus_client_name_changed)
 METHODS_END
 

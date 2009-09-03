@@ -56,6 +56,12 @@ lashd_dbus_signal_emit_project_saved(const char *project_name);
 void
 lashd_dbus_signal_emit_project_loaded(const char *project_name);
 
+/** Emit the @a ProjectSnapshotted signal.
+ * @param project_name The snapshotted project's name.
+ */
+void
+lashd_dbus_signal_emit_project_snapshotted(const char *project_name);
+
 void
 lashd_dbus_signal_emit_client_appeared(const char *client_id,
                                        const char *project_name,

@@ -98,6 +98,13 @@ server_save_all_projects(void);
 void
 server_close_all_projects(void);
 
+/** Attempt to take a snapshot of the currently active session.
+ * @return False if snapshotting failed or there was no active session,
+ *         true if everything went OK.
+ */
+bool
+server_take_snapshot(void);
+
 bool
 server_project_close_by_name(const char *project_name);
 

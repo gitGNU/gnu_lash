@@ -152,6 +152,7 @@ callback(enum LashEvent  type,
 	case LASH_EVENT_INTERRUPT:
 		return true;
 	case LASH_EVENT_SAVE:
+	case LASH_EVENT_SNAPSHOT:
 		info("Client saving");
 		return save(client);
 	case LASH_EVENT_LOAD:

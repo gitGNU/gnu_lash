@@ -940,6 +940,21 @@ lashd_dbus_projects_close_all(method_call_t *call)
 	server_close_all_projects();
 }
 
+/** This is the method handler for @a org.nongnu.LASH.Control.Snapshot. It
+ * attempts to take a snapshot of the current session. If snapshotting fails
+ * it returns an error message.
+ * @param call Pointer to the method call.
+ */
+static void
+lashd_dbus_snapshot(method_call_t *call)
+{
+	lash_info("Snapshotting session");
+
+	if (!server_take_snapshot())
+		lash_dbus_error(call, LASH_DBUS_ERROR_GENERIC,
+		                "Failed to take snapshot");
+}
+
 static void
 lashd_dbus_exit(method_call_t *call)
 {
@@ -1022,6 +1037,14 @@ lashd_dbus_signal_emit_project_loaded(const char *project_name)
 {
 	signal_new_single(g_server->dbus_service,
 	                  "/", INTERFACE_NAME, "ProjectLoaded",
+	                  DBUS_TYPE_STRING, &project_name);
+}
+
+void
+lashd_dbus_signal_emit_project_snapshotted(const char *project_name)
+{
+	signal_new_single(g_server->dbus_service,
+	                  "/", INTERFACE_NAME, "ProjectSnapshotted",
 	                  DBUS_TYPE_STRING, &project_name);
 }
 
@@ -1161,6 +1184,9 @@ METHOD_ARGS_END
 METHOD_ARGS_BEGIN(ProjectsCloseAll)
 METHOD_ARGS_END
 
+METHOD_ARGS_BEGIN(Snapshot)
+METHOD_ARGS_END
+
 METHOD_ARGS_BEGIN(Exit)
 METHOD_ARGS_END
 
@@ -1185,6 +1211,7 @@ METHODS_BEGIN
   METHOD_DESCRIBE(ProjectClose, lashd_dbus_project_close)
   METHOD_DESCRIBE(ProjectsSaveAll, lashd_dbus_projects_save_all)
   METHOD_DESCRIBE(ProjectsCloseAll, lashd_dbus_projects_close_all)
+  METHOD_DESCRIBE(Snapshot, lashd_dbus_snapshot)
   METHOD_DESCRIBE(Exit, lashd_dbus_exit)
 METHODS_END
 
@@ -1234,6 +1261,10 @@ SIGNAL_ARGS_BEGIN(ProjectLoaded)
   SIGNAL_ARG_DESCRIBE("project_name", "s")
 SIGNAL_ARGS_END
 
+SIGNAL_ARGS_BEGIN(ProjectSnapshotted)
+  SIGNAL_ARG_DESCRIBE("project_name", "s")
+SIGNAL_ARGS_END
+
 SIGNAL_ARGS_BEGIN(ClientAppeared)
   SIGNAL_ARG_DESCRIBE("client_id", "s")
   SIGNAL_ARG_DESCRIBE("project_name", "s")
@@ -1269,6 +1300,7 @@ SIGNALS_BEGIN
   SIGNAL_DESCRIBE(ProjectPathChanged)
   SIGNAL_DESCRIBE(ProjectSaved)
   SIGNAL_DESCRIBE(ProjectLoaded)
+  SIGNAL_DESCRIBE(ProjectSnapshotted)
   SIGNAL_DESCRIBE(ClientAppeared)
   SIGNAL_DESCRIBE(ClientDisappeared)
   SIGNAL_DESCRIBE(ClientNameChanged)

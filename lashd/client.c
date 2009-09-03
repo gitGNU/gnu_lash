@@ -185,6 +185,7 @@ client_task_completed(struct lash_client *client,
 
 	switch (client->task_type) {
 	case LASH_EVENT_SAVE:
+	case LASH_EVENT_SNAPSHOT: // TODO: Snapshotting probably needs its own handling
 		if (was_succesful && !store_write(client->store)) {
 			lash_error("Client '%s' could not write data "
 			           "to disk (task %llu)",

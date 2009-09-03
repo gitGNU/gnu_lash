@@ -66,6 +66,7 @@ project_new(void)
 
 	INIT_LIST_HEAD(&project->clients);
 	INIT_LIST_HEAD(&project->lost_clients);
+	INIT_LIST_HEAD(&project->snapshot_waiters);
 
 	return project;
 }
@@ -446,6 +447,172 @@ project_save_clients(project_t *project)
 		project->task_type = 0;
 }
 
+/** Release all a snapshot waiters belonging to project @a project.
+ * The waiters will signal their clients with the value of @a snapshot_ok where
+ * <i>true</i> means proceed and <i>false</i> means abort.
+ * @param project Pointer to the project whose snapshot waiters to release.
+ * @param snapshot_ok Whether to proceed with the snapshot.
+ */
+static void
+project_release_snapshot_waiters(project_t *project,
+                                 bool       snapshot_ok)
+{
+	struct list_head *node, *next;
+	struct project_snapshot_waiter *waiter;
+	DBusMessageIter iter;
+
+	uint32_t i = 0;
+
+	/* TODO: Describe */
+	list_for_each_safe (node, next, &project->snapshot_waiters) {
+		waiter = list_entry(node, struct project_snapshot_waiter, list_hook);
+
+		dbus_message_iter_init_append(waiter->reply, &iter);
+
+		if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_BOOLEAN, &snapshot_ok))
+			lash_error("Failed to append data to WaitSnapshot reply");
+		else if (!dbus_connection_send(g_server->dbus_service->connection, waiter->reply, NULL))
+			lash_error("Failed to send WaitSnapshot reply");
+		else
+			++i;
+
+		dbus_message_unref(waiter->reply);
+		
+		list_del(&waiter->list_hook);
+		free(waiter);
+	}
+
+	/* If we added messages to the send queue flush them out */
+	if (i)
+		dbus_connection_flush(g_server->dbus_service->connection);
+}
+
+void
+project_run_snapshot(project_t *project)
+{
+	lash_info("Running snapshot");
+
+	project_release_snapshot_waiters(project, true);
+}
+
+void
+project_abort_snapshot(project_t *project)
+{
+	lash_error("Aborting snapshot");
+
+	project_release_snapshot_waiters(project, false);
+
+	// TODO: Other task abortion stuff
+}
+
+/** This is the return handler for the TrySnapshot call issued by the server
+ * when it attempts to snapshot a given partition. The call is made to each
+ * client that belongs to the partition.
+ * Should a client respond and consequently invoke this handler, the snapshot
+ * will always be aborted. This is because a client is expected to either reply
+ * 'false' to TrySnapshot, or not reply at all and instead call WaitSnapshot to
+ * signal its willingness to follow through. Thus reaching this code path is
+ * always a fault of some kind.
+ * @param pending Pointer to the D-Bus object containing the reply message.
+ * @param data Context data. In this handler it is the client pointer.
+ */
+static void
+try_snapshot_return_handler(DBusPendingCall *pending,
+                            void            *data)
+{
+	struct lash_client *client = data;
+	DBusMessage *msg = dbus_pending_call_steal_reply(pending);
+	const char *err_str;
+	DBusError err;
+	dbus_bool_t snapshot_ok;
+
+	if (msg) {
+		if (method_return_verify(msg, &err_str)) {
+			dbus_error_init(&err);
+
+			if (dbus_message_get_args(msg, &err,
+			                          DBUS_TYPE_BOOLEAN, &snapshot_ok,
+			                          DBUS_TYPE_INVALID)
+			    && snapshot_ok) {
+				lash_error("Protocol error: Client responded to TrySnapshot with "
+				           "'true' when it should have called WaitSnapshot instead");
+			} else {
+				lash_error("Cannot get message argument: %s", err.message);
+				dbus_error_free(&err);
+			}
+		} else {
+			lash_error("Client returned an error: %s", err_str);
+		}
+
+		dbus_message_unref(msg);
+	} else {
+		lash_error("Cannot get method return from pending call");
+	}
+
+	dbus_pending_call_unref(pending);
+	project_abort_snapshot(client->task_project);
+}
+
+/** Attempt to snapshot all clients belonging to project @a project.
+ * @param project Pointer to the project whose clients to snapshot.
+ * @return
+ */
+static __inline__ bool
+project_snapshot_clients(project_t *project)
+{
+	struct list_head *node;
+	struct lash_client *client;
+
+	// TODO: The same code is in project_save_clients(), share it
+	list_for_each (node, &project->clients) {
+		client = list_entry(node, struct lash_client, siblings);
+		if (client->pending_task) {
+			lash_error("Clients have pending tasks, aborting snapshot");
+			return false;
+		}
+	}
+
+	/* Initialize relevant project variables */
+	project->task_type = LASH_EVENT_SNAPSHOT;
+	project->client_tasks_total = 0;
+	project->client_tasks_progress = 0;
+	project->snapshot_counter = 0;
+	++g_server->task_iter;
+
+	lash_debug("Sending each client in project '%s' a TrySnapshot message (shared task %llu)",
+	           project->name, g_server->task_iter);
+
+	/* Iterate client list, send messages */
+	list_for_each (node, &project->clients) {
+		client = list_entry(node, struct lash_client, siblings);
+
+		/* Initialize relevant client variables */
+		client->pending_task = g_server->task_iter;
+		client->task_type = LASH_EVENT_SNAPSHOT;
+		client->task_progress = 0;
+		client->task_project = project;
+
+		/* Send message, don't wait for the reply */
+		method_call_new_single(g_server->dbus_service, client,
+		                       try_snapshot_return_handler, false, false,
+		                       client->dbus_name,
+		                       "/org/nongnu/LASH/Client",
+		                       "org.nongnu.LASH.Client",
+		                       "TrySnapshot",
+		                       DBUS_TYPE_UINT64,
+		                       &g_server->task_iter);
+
+		++project->client_tasks_total;
+	}
+
+	if ((project->client_tasks_pending = project->client_tasks_total) == 0) {
+		lash_debug("No clients to snapshot");
+		project->task_type = LASH_EVENT_INVALID;
+	}
+
+	return true;
+}
+
 static void
 project_create_client_jack_patch_xml(project_t  *project,
                                      struct lash_client   *client,
@@ -687,6 +854,7 @@ project_update_last_modify_time(
 	return true;
 }
 
+// TODO: Modify to be more logical. Look at project_client_snapshots_complete.
 static
 __inline__
 void
@@ -713,6 +881,30 @@ project_clients_save_complete(
 	}
 
 	project_set_modified_status(project_ptr, false);
+}
+
+/** Finalize the project's snapshot operation by writing the project info file,
+ * sending signals and updating project status variables. As its name suggests
+ * this function is meant to be called after all client snapshots have run.
+ * @param project Pointer to the project whose client snapshots have completed.
+ */
+static __inline__ void
+project_client_snapshots_complete(project_t *project)
+{
+	bool success;
+
+	success = project_write_info(project);
+
+	/* Signal task completion */
+	lashd_dbus_signal_emit_progress(100);
+	if (success)
+		lashd_dbus_signal_emit_project_snapshotted(project->name);
+
+	project_update_last_modify_time(project);
+	/* TODO: Even if project_write_info() fails we should probably check if
+	   some of the clients already saved. That would require us to set
+	   'modified' to true nevertheless. */
+	project_set_modified_status(project, !success);
 }
 
 static
@@ -773,6 +965,49 @@ project_save(project_t *project)
 	{
 		project_clients_save_complete(project);
 	}
+}
+
+bool
+project_take_snapshot(project_t *project)
+{
+	if (project->task_type) {
+		lash_error("Another task (type %u) is in progress, cannot take snapshot", project->task_type);
+		lash_error("%" PRIu32 " pending client tasks.", project->client_tasks_pending);
+		return;
+	}
+
+	lash_info("Snapshotting project '%s' ...", project->name);
+
+	/* Signal beginning of task */
+	lashd_dbus_signal_emit_progress(0);
+
+	if (list_empty(&project->siblings_all)) {
+		/* this is first save for new project, add it to available for loading list */
+		list_add_tail(&project->siblings_all, &g_server->all_projects);
+	}
+
+	if (!lash_dir_exists(project->directory)) {
+		lash_create_dir(project->directory);
+		lash_info("Created project directory %s", project->directory);
+	}
+
+	if (!project_snapshot_clients(project))
+		return;
+
+#ifdef HAVE_JACK_DBUS
+	lashd_jackdbus_mgr_get_graph(g_server->jackdbus_mgr);
+#endif
+
+	if (!project_save_notes(project))
+		lash_error("Error writing notes file for project '%s'", project->name);
+
+	/* in project_save_clients we tell clients to save and save completes when there are no pending tasks,
+	   as detected in project_client_task_completed()
+	   However, when there are not clients with internal state, project_client_task_completed() is not called at all.
+	   OTOH save is complete at this point.
+	*/
+	if (project->client_tasks_total == 0) /* check for project with stateless clients only */
+		project_client_snapshots_complete(project);
 }
 
 bool

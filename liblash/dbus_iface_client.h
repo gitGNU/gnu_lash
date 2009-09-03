@@ -36,12 +36,10 @@ extern const interface_t g_liblash_interface_client;
  * a success or failure message if necessary.<br />
  * This function is meant to be used only for save-type tasks.
  * @param client Pointer to client.
- * @param task_id Task ID.
  * @param task_event Task event type.
  */
 void
 lash_new_save_task(lash_client_t  *client,
-                   dbus_uint64_t   task_id,
                    enum LashEvent  task_event);
 
 void
