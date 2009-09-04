@@ -32,7 +32,7 @@
 #include "project.h"
 #include "common/safety.h"
 #include "common/debug.h"
-#include "common/klist.h"
+#include "common/list.h"
 #include "dbus/interface.h"
 #include "dbus/error.h"
 #include "lash/types.h"

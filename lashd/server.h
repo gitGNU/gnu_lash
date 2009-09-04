@@ -31,7 +31,7 @@
 
 #include "types.h"
 #include "dbus/service.h"
-#include "common/klist.h"
+#include "common/list.h"
 
 extern server_t *g_server;
 

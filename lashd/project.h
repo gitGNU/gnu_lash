@@ -28,7 +28,7 @@
 #include <libxml/tree.h>
 
 #include "types.h"
-#include "common/klist.h"
+#include "common/list.h"
 #include "lash/types.h"
 
 #define PROJECT_ID_DIR      ".id"

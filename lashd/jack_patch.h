@@ -32,7 +32,7 @@
 #endif
 
 #include "types.h"
-#include "common/klist.h"
+#include "common/list.h"
 
 struct _jack_patch
 {

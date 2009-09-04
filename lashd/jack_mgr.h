@@ -26,7 +26,7 @@
 #include <uuid/uuid.h>
 #include <jack/jack.h>
 
-#include "common/klist.h"
+#include "common/list.h"
 
 #include "types.h"
 

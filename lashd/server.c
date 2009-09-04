@@ -42,7 +42,7 @@
 #include "dbus_iface_control.h"
 #include "common/safety.h"
 #include "common/debug.h"
-#include "common/klist.h"
+#include "common/list.h"
 #include "common/types.h"
 #include "jack_mgr_client.h"
 

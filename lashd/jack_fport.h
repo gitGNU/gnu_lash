@@ -24,7 +24,7 @@
 
 #include <jack/jack.h>
 
-#include "common/klist.h"
+#include "common/list.h"
 #include "lashd/types.h"
 
 struct _jack_fport

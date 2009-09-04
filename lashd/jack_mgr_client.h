@@ -31,7 +31,7 @@
 # include <dbus/dbus.h>
 #endif
 
-#include "common/klist.h"
+#include "common/list.h"
 #include "lashd/types.h"
 
 struct _jack_mgr_client
