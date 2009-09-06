@@ -166,40 +166,6 @@ lash_server_signal_handler(lash_client_t *client,
 }
 
 static void
-lash_project_name_changed_handler(lash_client_t *client,
-                                  DBusMessage   *message)
-{
-	DBusError err;
-	const char *old_name, *new_name;
-
-	dbus_error_init(&err);
-
-	if (!dbus_message_get_args(message, &err,
-	                           DBUS_TYPE_STRING, &old_name,
-	                           DBUS_TYPE_STRING, &new_name,
-	                           DBUS_TYPE_INVALID)) {
-		lash_error("Cannot get signal arguments: %s", err.message);
-		dbus_error_free(&err);
-		return;
-	}
-
-	if (client->project_name) {
-		if (strcmp(client->project_name, old_name) != 0)
-			return;
-	} else if (old_name[0])
-		return;
-
-	if (!new_name[0])
-		new_name = NULL;
-
-	lash_strset(&client->project_name, new_name);
-
-	/* Call client's ProjectChanged callback */
-	if (check_client_cb(client, NULL))
-		client->client_cb(LASH_EVENT_PROJECT_NAME_CHANGED, client->client_data);
-}
-
-static void
 lash_control_signal_handler(lash_client_t *client,
                             const char    *member,
                             DBusMessage   *message)
@@ -316,17 +282,16 @@ lash_dbus_signal_handler(DBusConnection *connection,
 	}
 
 	if (strcmp(interface, "org.nongnu.LASH.Server") == 0) {
-		lash_debug("Received Server signal '%s'", member);
-		lash_server_signal_handler(client, member, message);
+		if ((client->flags & LashClientIsOrdinary)) {
+			lash_debug("Received Server signal '%s'", member);
+			lash_server_signal_handler(client, member, message);
+		}
 
 	} else if (strcmp(interface, "org.nongnu.LASH.Control") == 0) {
-		lash_debug("Received Control signal '%s'", member);
-
-		if (client->flags & LashClientIsOrdinary)
-			lash_project_name_changed_handler(client, message);
-
-		if (client->flags & LashClientIsController)
+		if ((client->flags & LashClientIsController)) {
+			lash_debug("Received Control signal '%s'", member);
 			lash_control_signal_handler(client, member, message);
+		}
 
 	} else if (strcmp(interface, "org.freedesktop.DBus") != 0) {
 		lash_error("Received signal from unknown interface '%s'",
@@ -462,16 +427,6 @@ lash_client_open(const char      *class,
 	                   ",path='/'"
 	                   ",interface='org.nongnu.LASH.Server'",
 	                   &err);
-
-	if (!dbus_error_is_set(&err)) {
-		dbus_bus_add_match(client->dbus_service->connection,
-		                   "type='signal'"
-		                   ",sender='org.nongnu.LASH'"
-		                   ",path='/'"
-		                   ",interface='org.nongnu.LASH.Control'"
-		                   ",member='ProjectNameChanged'",
-		                   &err);
-	}
 
 	if (dbus_error_is_set(&err)) {
 		lash_error("Failed to add D-Bus match rule: %s", err.message);
