@@ -257,7 +257,7 @@ lash_dbus_save(method_call_t *call)
 static void
 lash_dbus_load(method_call_t *call)
 {
-	DBusMessageIter iter, array_iter;
+	DBusMessageIter iter;
 	dbus_uint64_t task_id;
 	bool retval;
 
