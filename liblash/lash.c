@@ -615,13 +615,6 @@ lash_get_client_name(lash_client_t *client)
 	                       ? client->name : NULL);
 }
 
-const char *
-lash_get_project_name(lash_client_t *client)
-{
-	return (const char *) ((client && client->dbus_service)
-	                       ? client->project_name : NULL);
-}
-
 bool
 lash_client_is_being_restored(lash_client_t *client)
 {

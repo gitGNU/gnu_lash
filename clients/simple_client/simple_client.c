@@ -75,8 +75,6 @@ main(int    argc,
 		error("Failed to activate LASH client");
 		goto end2;
 	}
-	info("Client '%s' is associated with project '%s'",
-	     lash_get_client_name(client), lash_get_project_name(client));
 
 	pause();
 
@@ -162,14 +160,8 @@ callback(enum LashEvent  type,
 		info("Client quitting");
 		kill(getpid(), SIGQUIT);
 		return true;
-	case LASH_EVENT_CHANGE_NAME:
-		info("Client name changed to '%s'", lash_get_client_name(client));
-		return true;
-	case LASH_EVENT_CHANGE_PROJECT:
-		info("Project changed to '%s'", lash_get_project_name(client));
-		return true;
-	case LASH_EVENT_CHANGE_PROJECT_NAME:
-		info("Project name changed to '%s'", lash_get_project_name(client));
+	case LASH_EVENT_RENAME:
+		info("Client renamed to '%s'", lash_get_client_name(client));
 		return true;
 	case LASH_EVENT_INVALID:
 	default:

@@ -83,14 +83,6 @@ lash_deactivate(lash_client_t *client);
 const char *
 lash_get_client_name(lash_client_t *client);
 
-/** Get the name of the LASH project the client currently belongs to.
- * @param client Pointer to the LASH client.
- * @return Pointer to the client's current project name.
- * TODO: What if it's NULL?
- */
-const char *
-lash_get_project_name(lash_client_t *client);
-
 bool
 lash_client_is_being_restored(lash_client_t *client);
 
