@@ -448,9 +448,11 @@ lashd_dbus_wait_snapshot(method_call_t *call)
 
 	/* If we can't find the sender in the active clients, or the task id is
 	   invalid, we can't do anything but return as we don't even have info
-	   about any snapshot to abort */
+	   about any snapshot to abort. 
+	   Neither can we proceed if the client's not associated with a project.
+	 */
 	if (!get_message_sender_only_active(call, &sender, &client)
-	    ||!check_tasks(call, client, NULL))
+	    ||!check_tasks(call, client, NULL) || !(project = client->project))
 		return;
 
 	/* TODO: Describe */
