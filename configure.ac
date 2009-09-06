@@ -403,7 +403,7 @@ AC_MSG_RESULT($DEFAULT_PROJECT_DIR)
 
 LASH_CFLAGS=""
 if test "x$lash_debug" = "xyes"; then
-  LASH_CFLAGS="-g"
+  LASH_CFLAGS="-g -Wall -Werror"
 fi
 AC_SUBST(LASH_CFLAGS)
 AC_MSG_CHECKING(LASH_CFLAGS)
