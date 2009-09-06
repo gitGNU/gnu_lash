@@ -82,7 +82,7 @@ lash_dbus_service_connect_handler(DBusPendingCall *pending,
 
 	client->flags = flags|LashClientIsConnected;
 
-	lash_debug("Connected to LASH server with client flags %lu", flags);
+	lash_debug("Connected to LASH server with client flags %u", flags);
 
 end_unref_msg:
 	dbus_message_unref(msg);
