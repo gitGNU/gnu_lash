@@ -972,7 +972,7 @@ project_take_snapshot(project_t *project)
 	if (project->task_type) {
 		lash_error("Another task (type %u) is in progress, cannot take snapshot", project->task_type);
 		lash_error("%" PRIu32 " pending client tasks.", project->client_tasks_pending);
-		return;
+		return false;
 	}
 
 	lash_info("Snapshotting project '%s' ...", project->name);
@@ -991,7 +991,7 @@ project_take_snapshot(project_t *project)
 	}
 
 	if (!project_snapshot_clients(project))
-		return;
+		return false;
 
 #ifdef HAVE_JACK_DBUS
 	lashd_jackdbus_mgr_get_graph(g_server->jackdbus_mgr);
@@ -1007,6 +1007,8 @@ project_take_snapshot(project_t *project)
 	*/
 	if (project->client_tasks_total == 0) /* check for project with stateless clients only */
 		project_client_snapshots_complete(project);
+
+	return true;
 }
 
 bool
