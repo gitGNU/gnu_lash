@@ -187,6 +187,11 @@ void
 project_rename(project_t  *project,
                const char *new_name);
 
+/** Send a Load method call to the client */
+void
+project_load_client(project_t *project,
+                    struct lash_client  *client);
+
 void
 project_load_file(project_t *project,
                   struct lash_client  *client);

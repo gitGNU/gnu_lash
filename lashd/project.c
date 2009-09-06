@@ -227,7 +227,6 @@ project_satisfy_client_dependency(project_t *project,
 	}
 }
 
-/* Send a Load method call to the client */
 void
 project_load_client(project_t *project,
                     struct lash_client  *client)
