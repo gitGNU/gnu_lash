@@ -252,6 +252,18 @@ static inline void list_splice_init(struct list_head *list,
        prefetch(pos->member.next), &pos->member != (head);  \
        pos = list_entry(pos->member.next, typeof(*pos), member))
 
+/** Iterate over list of given type safe against removal of list entry.
+ * @param pos  The type * to use as a loop counter.
+ * @param n Another type * to use as temporary storage
+ * @param head The head for your list.
+ * @param member The name of the list_struct within the struct.
+ */
+#define list_for_each_entry_safe(pos, n, head, member)        \
+  for (pos = list_entry((head)->next, typeof(*pos), member),  \
+       n = list_entry(pos->member.next, typeof(*pos), member);  \
+       prefetch(pos->member.next), &pos->member != (head);  \
+       pos = n, n = list_entry(pos->member.next, typeof(*pos), member))
+
 /** Iterate backwards over list of given type.
  * @param pos  The type * to use as a loop counter.
  * @param head The head for your list.
